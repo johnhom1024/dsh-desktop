@@ -7,7 +7,7 @@ const pnpmDlx = { packageRoot: '/pnpm/dlx/dsh', version: '0.1.0-rc.6' }
 const npxCache = { packageRoot: '/npx/dsh', version: '0.1.0' }
 
 function settings(partial: Partial<Settings> = {}): Settings {
-  return { connectionMode: 'smart', ...partial }
+  return { connectionMode: 'smart', localPort: 3080, ...partial }
 }
 
 test('smart mode reuses local 3080 before path, pnpm dlx, npx, or bundled', async () => {
@@ -130,4 +130,22 @@ test('local-only mode never returns a remote source', async () => {
   })
 
   deepEqual(source, { kind: 'none' })
+})
+
+test('smart mode reuses the saved local port instead of 3080', async () => {
+  const probed: string[] = []
+  const source = await resolveRuntime({
+    settings: settings({ localPort: 18080 }),
+    probe: async (url) => {
+      probed.push(url)
+      return url === 'http://127.0.0.1:18080'
+    },
+    whichDsh: async () => '/usr/local/bin/dsh',
+    findPnpmDlx: async () => pnpmDlx,
+    findNpxCache: async () => npxCache,
+    bundled,
+  })
+
+  deepEqual(probed, ['http://127.0.0.1:18080'])
+  deepEqual(source, { kind: 'reuse-local', url: 'http://127.0.0.1:18080' })
 })

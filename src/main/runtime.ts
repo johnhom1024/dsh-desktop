@@ -1,7 +1,10 @@
 export type ConnectionMode = 'smart' | 'local-only' | 'remote'
 
+export const DEFAULT_LOCAL_PORT = 3080
+
 export type Settings = {
   connectionMode: ConnectionMode
+  localPort: number
   remoteUrl?: string
 }
 
@@ -19,7 +22,9 @@ export type RuntimeSource =
   | { kind: 'remote'; url: string }
   | { kind: 'none' }
 
-const LOCAL_WEB_URL = 'http://127.0.0.1:3080'
+export function localWebUrl(port: number = DEFAULT_LOCAL_PORT): string {
+  return `http://127.0.0.1:${port}`
+}
 
 export async function resolveRuntime(input: {
   settings: Settings
@@ -33,8 +38,9 @@ export async function resolveRuntime(input: {
     return { kind: 'remote', url: input.settings.remoteUrl }
   }
 
-  if (await input.probe(LOCAL_WEB_URL)) {
-    return { kind: 'reuse-local', url: LOCAL_WEB_URL }
+  const reuseUrl = localWebUrl(input.settings.localPort ?? DEFAULT_LOCAL_PORT)
+  if (await input.probe(reuseUrl)) {
+    return { kind: 'reuse-local', url: reuseUrl }
   }
 
   const command = await input.whichDsh()

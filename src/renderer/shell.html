@@ -99,8 +99,8 @@
       <section class="card">
         <h2>当前没有检测到 DeepSeek Harness</h2>
         <p>
-          本机 <code>127.0.0.1:3080</code> 现在不是官方 Web 页面。
-          选择一个本机已有的包管理器，确认后会执行对应命令安装并启动；端口就绪后自动打开页面。
+          本机 <code id="localHint">127.0.0.1:3080</code> 现在不是官方 Web 页面。
+          可在设置里改本机 DSH 端口。选择一个本机已有的包管理器，确认后会执行对应命令安装并启动；端口就绪后自动打开页面。
         </p>
         <div id="options" class="options"></div>
         <button id="install" class="primary" type="button" disabled>确认并启动</button>
@@ -127,6 +127,8 @@
         }
 
         optionsEl.innerHTML = ''
+        const port = state.localPort || 3080
+        document.querySelector('#localHint').textContent = '127.0.0.1:' + port
         selectedId = state.managers.some((item) => item.id === selectedId)
           ? selectedId
           : (state.managers[0] && state.managers[0].id) || null

@@ -6,7 +6,7 @@ This repo does **not** fork the official project. The desktop app only starts or
 
 ## Runtime order
 
-1. Reuse `http://127.0.0.1:3080` if it is already the official UI
+1. Reuse `http://127.0.0.1:<port>` if it is already the official UI (default port `3080`, changeable in Settings)
 2. `dsh` on `PATH`
 3. Cached `@deepseek-ai/dsh` from `pnpm dlx` (`~/Library/Caches/pnpm/dlx`)
 4. Cached `@deepseek-ai/dsh` from npx
@@ -15,7 +15,7 @@ This repo does **not** fork the official project. The desktop app only starts or
 
 If no official Web UI is found, the app stays on a host shell with **检测** and **设置**. The shell lists package managers already on `PATH` (`pnpm` first, then `npx`, `yarn`, `bunx`) and only runs an install/start command after you confirm. When the printed loopback port becomes ready, the official page opens.
 
-Closing the window hides the app to the menu-bar tray. Quit from the tray. Only a process started by this app is stopped on quit; a reused `3080` instance is left running.
+Closing the window hides the app to the menu-bar tray. Quit from the tray. Only a process started by this app is stopped on quit; a reused local instance is left running.
 
 ## Develop
 

@@ -128,15 +128,18 @@ export type ShellState = {
   detected: boolean
   url: string | null
   sourceKind: string
+  localPort: number
   managers: PackageManagerOption[]
   lastError: string | null
 }
 
 async function shellState(): Promise<ShellState> {
+  const settings = loadSettings(app.getPath('userData'))
   return {
     detected: Boolean(currentUrl),
     url: currentUrl,
     sourceKind: currentSource.kind,
+    localPort: settings.localPort,
     managers: await detectPackageManagers(lookupOnPath),
     lastError,
   }

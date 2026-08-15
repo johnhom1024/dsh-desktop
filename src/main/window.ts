@@ -48,7 +48,7 @@ export function loadHarnessPage(window: BrowserWindow, url: string): void {
 export function createSettingsWindow(preloadPath: string, htmlPath: string): BrowserWindow {
   const window = new BrowserWindow({
     width: 520,
-    height: 420,
+    height: 480,
     title: '连接设置',
     webPreferences: {
       preload: preloadPath,

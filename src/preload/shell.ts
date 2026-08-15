@@ -6,6 +6,7 @@ export type ShellState = {
   detected: boolean
   url: string | null
   sourceKind: string
+  localPort: number
   managers: PackageManagerOption[]
   lastError: string | null
 }

@@ -11,16 +11,20 @@
       .row { margin-top: 16px; display: flex; gap: 8px; }
       button { padding: 8px 14px; }
       .status { margin-top: 16px; color: #57606a; }
+      .hint { margin: 6px 0 0; color: #57606a; font-size: 12px; }
     </style>
   </head>
   <body>
     <h1>连接设置</h1>
     <label for="mode">模式</label>
     <select id="mode">
-      <option value="smart">智能：复用本机 3080，再 PATH / pnpm dlx / npx</option>
+      <option value="smart">智能：复用本机端口，再 PATH / pnpm dlx / npx</option>
       <option value="local-only">仅本机</option>
       <option value="remote">远程实例</option>
     </select>
+    <label for="localPort">本机 DSH 端口</label>
+    <input id="localPort" type="number" min="1" max="65535" step="1" placeholder="3080" />
+    <p class="hint">智能连接会先探测 <code>127.0.0.1</code> 上这个端口。默认 3080。</p>
     <label for="remoteUrl">远程 URL</label>
     <input id="remoteUrl" placeholder="http://192.168.31.229:3080" />
     <p class="status">当前来源：<span id="source">unknown</span></p>
@@ -30,30 +34,38 @@
     </div>
     <script>
       const mode = document.querySelector('#mode')
+      const localPort = document.querySelector('#localPort')
       const remoteUrl = document.querySelector('#remoteUrl')
       const source = document.querySelector('#source')
       const api = window.dshSettings
 
+      function readSettings() {
+        return {
+          connectionMode: mode.value,
+          localPort: Number(localPort.value),
+          remoteUrl: remoteUrl.value.trim() || undefined,
+        }
+      }
+
       async function refresh() {
         const view = await api.get()
         mode.value = view.settings.connectionMode
+        localPort.value = String(view.settings.localPort || 3080)
         remoteUrl.value = view.settings.remoteUrl || ''
         source.textContent = view.sourceKind
       }
 
       document.querySelector('#save').addEventListener('click', async () => {
-        const ok = await api.save({
-          connectionMode: mode.value,
-          remoteUrl: remoteUrl.value.trim() || undefined,
-        })
-        source.textContent = ok ? '已保存' : '远程 URL 必须是 http 或 https'
+        const ok = await api.save(readSettings())
+        source.textContent = ok ? '已保存' : '端口必须是 1–65535，远程 URL 必须是 http 或 https'
       })
 
       document.querySelector('#reconnect').addEventListener('click', async () => {
-        await api.save({
-          connectionMode: mode.value,
-          remoteUrl: remoteUrl.value.trim() || undefined,
-        })
+        const ok = await api.save(readSettings())
+        if (!ok) {
+          source.textContent = '端口必须是 1–65535，远程 URL 必须是 http 或 https'
+          return
+        }
         await api.reconnect()
         await refresh()
       })
