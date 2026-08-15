@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>连接设置</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; margin: 24px; }
+      label { display: block; margin: 12px 0 6px; }
+      select, input { width: 100%; box-sizing: border-box; padding: 8px; }
+      .row { margin-top: 16px; display: flex; gap: 8px; }
+      button { padding: 8px 14px; }
+      .status { margin-top: 16px; color: #57606a; }
+    </style>
+  </head>
+  <body>
+    <h1>连接设置</h1>
+    <label for="mode">模式</label>
+    <select id="mode">
+      <option value="smart">智能：复用本机 3080，再 PATH / pnpm dlx / npx</option>
+      <option value="local-only">仅本机</option>
+      <option value="remote">远程实例</option>
+    </select>
+    <label for="remoteUrl">远程 URL</label>
+    <input id="remoteUrl" placeholder="http://192.168.31.229:3080" />
+    <p class="status">当前来源：<span id="source">unknown</span></p>
+    <div class="row">
+      <button id="save" type="button">保存</button>
+      <button id="reconnect" type="button">重新连接</button>
+    </div>
+    <script>
+      const mode = document.querySelector('#mode')
+      const remoteUrl = document.querySelector('#remoteUrl')
+      const source = document.querySelector('#source')
+      const api = window.dshSettings
+
+      async function refresh() {
+        const view = await api.get()
+        mode.value = view.settings.connectionMode
+        remoteUrl.value = view.settings.remoteUrl || ''
+        source.textContent = view.sourceKind
+      }
+
+      document.querySelector('#save').addEventListener('click', async () => {
+        const ok = await api.save({
+          connectionMode: mode.value,
+          remoteUrl: remoteUrl.value.trim() || undefined,
+        })
+        source.textContent = ok ? '已保存' : '远程 URL 必须是 http 或 https'
+      })
+
+      document.querySelector('#reconnect').addEventListener('click', async () => {
+        await api.save({
+          connectionMode: mode.value,
+          remoteUrl: remoteUrl.value.trim() || undefined,
+        })
+        await api.reconnect()
+        await refresh()
+      })
+
+      refresh()
+    </script>
+  </body>
+</html>

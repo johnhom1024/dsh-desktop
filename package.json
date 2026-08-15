@@ -7,7 +7,7 @@
   "main": "dist/main/index.js",
   "packageManager": "pnpm@8.11.0",
   "scripts": {
-    "dev": "pnpm run build:main && cross-env NODE_ENV=development electron .",
+    "dev": "pnpm run build:main && cross-env NODE_ENV=development pnpm exec electron .",
     "build:main": "tsc -p tsconfig.main.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "tsx --test src/main/*.test.ts"
