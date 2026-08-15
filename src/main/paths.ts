@@ -10,3 +10,7 @@ export function preloadFile(name: string): string {
 export function rendererFile(name: string): string {
   return join(here, '..', 'renderer', name)
 }
+
+export function desktopIconFile(): string {
+  return join(here, '..', '..', 'build', 'icon.png')
+}

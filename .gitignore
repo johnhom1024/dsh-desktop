@@ -4,5 +4,6 @@ release/
 .DS_Store
 *.log
 build/icon.png
+!build/icon-source.svg
 .pnpm-store/
 .hermes/*.png

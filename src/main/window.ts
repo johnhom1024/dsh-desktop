@@ -1,5 +1,11 @@
-import { BrowserWindow, shell, type WebContents } from 'electron'
+import { BrowserWindow, nativeImage, shell, type WebContents } from 'electron'
 import { clampWindowBounds, type WindowBounds } from './host-state.js'
+import { desktopIconFile } from './paths.js'
+
+function desktopIcon(): Electron.NativeImage | undefined {
+  const icon = nativeImage.createFromPath(desktopIconFile())
+  return icon.isEmpty() ? undefined : icon
+}
 
 export { TAB_BAR_HEIGHT } from './instance-views.js'
 
@@ -32,7 +38,8 @@ export function createMainWindow(opts: {
     y: bounds?.y,
     show: false,
     backgroundColor: '#eef1f4',
-    title: 'DeepSeek Harness',
+    title: 'dsh-desktop',
+    icon: desktopIcon(),
     webPreferences: {
       preload: opts.preloadPath,
       nodeIntegration: false,
