@@ -24,8 +24,46 @@ test('path-dsh spawns the binary with web --port 0', () => {
   })
 })
 
-test('package sources spawn the package bin with web --port 0', async () => {
-  const packageRoot = join(await mkdtemp(join(tmpdir(), 'dsh-bin-')), 'pkg')
+function lookupFrom(bins: Record<string, string>) {
+  return (bin: string) => bins[bin] ?? null
+}
+
+test('pnpm-dlx launches via pnpm dlx instead of Electron execPath', () => {
+  const spec = launchSpecFor(
+    {
+      kind: 'pnpm-dlx',
+      packageRoot: '/pnpm/dlx/dsh',
+      version: '0.1.0-rc.6',
+    },
+    lookupFrom({ pnpm: '/opt/homebrew/bin/pnpm' }),
+  )
+
+  deepEqual(spec, {
+    kind: 'spawn',
+    command: '/opt/homebrew/bin/pnpm',
+    args: ['dlx', '@deepseek-ai/dsh', 'web', '--port', '0'],
+  })
+})
+
+test('npx-cache launches via npx instead of Electron execPath', () => {
+  const spec = launchSpecFor(
+    {
+      kind: 'npx-cache',
+      packageRoot: '/npx/dsh',
+      version: '0.1.0-rc.6',
+    },
+    lookupFrom({ npx: '/usr/local/bin/npx' }),
+  )
+
+  deepEqual(spec, {
+    kind: 'spawn',
+    command: '/usr/local/bin/npx',
+    args: ['-y', '@deepseek-ai/dsh', 'web', '--port', '0'],
+  })
+})
+
+test('bundled package runs the package bin with a Node executable, not Electron', async () => {
+  const packageRoot = join(await mkdtemp(join(tmpdir(), 'dsh-bundled-')), 'pkg')
   await mkdir(packageRoot, { recursive: true })
   await writeFile(
     join(packageRoot, 'package.json'),
@@ -37,17 +75,30 @@ test('package sources spawn the package bin with web --port 0', async () => {
     'utf8',
   )
 
-  const spec = launchSpecFor({
-    kind: 'pnpm-dlx',
-    packageRoot,
-    version: '0.1.0-rc.6',
-  })
+  const spec = launchSpecFor(
+    {
+      kind: 'bundled',
+      packageRoot,
+      version: '0.1.0-rc.6',
+    },
+    lookupFrom({ node: '/usr/local/bin/node' }),
+  )
 
   equal(spec.kind, 'spawn')
   if (spec.kind === 'spawn') {
-    equal(spec.command, process.execPath)
+    equal(spec.command.includes('Electron'), false)
     deepEqual(spec.args, [join(packageRoot, 'lib/bin.js'), 'web', '--port', '0'])
   }
+})
+
+test('pnpm-dlx returns none when pnpm is missing', () => {
+  deepEqual(
+    launchSpecFor(
+      { kind: 'pnpm-dlx', packageRoot: '/pnpm/dlx/dsh', version: '0.1.0-rc.6' },
+      lookupFrom({}),
+    ),
+    { kind: 'none' },
+  )
 })
 
 test('none has no launch spec', () => {

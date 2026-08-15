@@ -5,26 +5,81 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { loadSettings, saveSettings } from './settings.js'
 
-const DEFAULTS = { connectionMode: 'smart', localPort: 3080, openAtLogin: false } as const
+const LOCAL_3080 = {
+  id: 'local-3080',
+  name: '本机 3080',
+  kind: 'local' as const,
+  url: 'http://127.0.0.1:3080',
+}
 
-test('loadSettings returns smart mode when the file is missing', async () => {
+const DEFAULTS = {
+  instances: [LOCAL_3080],
+  activeInstanceId: 'local-3080',
+  openAtLogin: false,
+} as const
+
+test('loadSettings returns a default local instance when the file is missing', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
 
   deepEqual(loadSettings(dir), { ...DEFAULTS })
 })
 
-test('saveSettings then loadSettings round-trips a remote url', async () => {
+test('loadSettings migrates localPort into a local instance', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+  const { writeFile } = await import('node:fs/promises')
+  await writeFile(
+    join(dir, 'settings.json'),
+    JSON.stringify({ connectionMode: 'smart', localPort: 18080, openAtLogin: false }),
+    'utf8',
+  )
+  const loaded = loadSettings(dir)
+  equal(loaded.instances.length, 1)
+  equal(loaded.instances[0]?.kind, 'local')
+  equal(loaded.instances[0]?.url, 'http://127.0.0.1:18080')
+  equal(loaded.instances[0]?.id, 'local-18080')
+  equal(loaded.instances[0]?.name, '本机 18080')
+  equal(loaded.activeInstanceId, loaded.instances[0]?.id)
+})
+
+test('loadSettings migrates remoteUrl into a second instance', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+  const { writeFile } = await import('node:fs/promises')
+  await writeFile(
+    join(dir, 'settings.json'),
+    JSON.stringify({
+      connectionMode: 'remote',
+      localPort: 3080,
+      remoteUrl: 'http://192.168.31.229:3080',
+    }),
+    'utf8',
+  )
+  const loaded = loadSettings(dir)
+  equal(loaded.instances.length, 2)
+  equal(loaded.instances[1]?.kind, 'remote')
+  equal(loaded.instances[1]?.url, 'http://192.168.31.229:3080')
+  equal(loaded.instances[1]?.id, 'remote-192.168.31.229-3080')
+  equal(loaded.activeInstanceId, loaded.instances[1]?.id)
+})
+
+test('saveSettings then loadSettings round-trips a remote instance', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+  const remote = {
+    id: 'remote-192.168.31.229-3080',
+    name: '192.168.31.229:3080',
+    kind: 'remote' as const,
+    url: 'http://192.168.31.229:3080',
+  }
 
   saveSettings(dir, {
-    connectionMode: 'remote',
-    remoteUrl: 'http://192.168.31.229:3080',
+    instances: [LOCAL_3080, remote],
+    activeInstanceId: remote.id,
+    openAtLogin: false,
   })
 
   deepEqual(loadSettings(dir), {
     ...DEFAULTS,
-    connectionMode: 'remote',
-    remoteUrl: 'http://192.168.31.229:3080',
+    instances: [LOCAL_3080, remote],
+    activeInstanceId: remote.id,
   })
 })
 
@@ -36,7 +91,21 @@ test('loadSettings falls back to defaults when json is invalid', async () => {
   deepEqual(loadSettings(dir), { ...DEFAULTS })
 })
 
-test('saveSettings rejects a non-http remote url', async () => {
+test('saveSettings rejects a remote instance with a non-http url', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+
+  equal(
+    saveSettings(dir, {
+      instances: [LOCAL_3080, { id: 'r1', name: 'bad', kind: 'remote', url: 'file:///tmp' }],
+      activeInstanceId: 'local-3080',
+      openAtLogin: false,
+    }),
+    false,
+  )
+  deepEqual(loadSettings(dir), { ...DEFAULTS })
+})
+
+test('saveSettings rejects a non-http remote url from a legacy payload', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
 
   equal(
@@ -49,13 +118,7 @@ test('saveSettings rejects a non-http remote url', async () => {
   deepEqual(loadSettings(dir), { ...DEFAULTS })
 })
 
-test('loadSettings defaults localPort to 3080', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
-
-  deepEqual(loadSettings(dir), { ...DEFAULTS })
-})
-
-test('saveSettings then loadSettings round-trips a custom local port', async () => {
+test('saveSettings then loadSettings round-trips a custom local port via legacy payload', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
 
   equal(
@@ -66,10 +129,10 @@ test('saveSettings then loadSettings round-trips a custom local port', async () 
     true,
   )
 
-  deepEqual(loadSettings(dir), {
-    ...DEFAULTS,
-    localPort: 18080,
-  })
+  const loaded = loadSettings(dir)
+  equal(loaded.instances[0]?.url, 'http://127.0.0.1:18080')
+  equal(loaded.instances[0]?.id, 'local-18080')
+  equal(loaded.activeInstanceId, 'local-18080')
 })
 
 test('saveSettings rejects a local port outside 1-65535', async () => {
@@ -107,7 +170,9 @@ test('saveSettings accepts a numeric local port sent as a string', async () => {
     }),
     true,
   )
-  deepEqual(loadSettings(dir), { ...DEFAULTS, localPort: 18080 })
+  const loaded = loadSettings(dir)
+  equal(loaded.instances[0]?.url, 'http://127.0.0.1:18080')
+  equal(loaded.activeInstanceId, 'local-18080')
 })
 
 test('saveSettings then loadSettings round-trips openAtLogin', async () => {
@@ -115,7 +180,8 @@ test('saveSettings then loadSettings round-trips openAtLogin', async () => {
 
   equal(
     saveSettings(dir, {
-      connectionMode: 'smart',
+      instances: [LOCAL_3080],
+      activeInstanceId: 'local-3080',
       openAtLogin: true,
     }),
     true,
@@ -128,7 +194,8 @@ test('saveSettings then loadSettings round-trips lastPackageManager and window b
 
   equal(
     saveSettings(dir, {
-      connectionMode: 'smart',
+      instances: [LOCAL_3080],
+      activeInstanceId: 'local-3080',
       lastPackageManager: 'pnpm',
       windowBounds: { x: 40, y: 60, width: 1400, height: 900 },
     }),
@@ -139,4 +206,18 @@ test('saveSettings then loadSettings round-trips lastPackageManager and window b
     lastPackageManager: 'pnpm',
     windowBounds: { x: 40, y: 60, width: 1400, height: 900 },
   })
+})
+
+test('saveSettings refuses an empty instance list', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+
+  equal(
+    saveSettings(dir, {
+      instances: [],
+      activeInstanceId: 'gone',
+      openAtLogin: false,
+    }),
+    false,
+  )
+  deepEqual(loadSettings(dir), { ...DEFAULTS })
 })
