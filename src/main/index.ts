@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, Tray, app, ipcMain, shell } from 'electron'
+import { BrowserWindow, Menu, Tray, WebContentsView, app, ipcMain, nativeTheme, shell, type WebContents } from 'electron'
 import { findNpxCachedDsh, findPnpmDlxCachedDsh, readDshPackage } from './dsh-package.js'
 import { startHarnessWeb } from './harness-process.js'
 import { appendHostLog, formatTrayStatus } from './host-state.js'
+import { removeInstance, selectInstance, upsertInstance } from './instances.js'
+import { TAB_BAR_HEIGHT, layoutActiveView, shouldShowInstanceView } from './instance-views.js'
 import { launchSpecFor } from './launch.js'
 import {
   detectPackageManagers,
@@ -12,10 +14,19 @@ import {
   type PackageManagerId,
   type PackageManagerOption,
 } from './package-managers.js'
+import { isHostPage } from './host-page.js'
+import { hostShortcutFor, type HostShortcut } from './host-shortcuts.js'
 import { repairProcessPath } from './path-repair.js'
 import { preloadFile, rendererFile } from './paths.js'
 import { probeHarnessWeb } from './probe.js'
-import { resolveRuntime, type RuntimeSource, type Settings } from './runtime.js'
+import {
+  activeInstance,
+  localPortFromSettings,
+  resolveRuntime,
+  type Instance,
+  type RuntimeSource,
+  type Settings,
+} from './runtime.js'
 import { loadSettings, saveSettings } from './settings.js'
 import { bindSingleInstance } from './single-instance.js'
 import { createTray, hideInsteadOfClose, setTrayStatus } from './tray.js'
@@ -25,13 +36,12 @@ import {
   fetchNpmLatestVersion,
   type UpdateReport,
 } from './updates.js'
-import { createMainWindow, createSettingsWindow, loadHarnessPage, loadShellPage } from './window.js'
+import { attachWindowGuards, createMainWindow, loadHostUrl, loadShellPage } from './window.js'
 
 const GITHUB_REPO = process.env.DSH_APP_GITHUB_REPO ?? ''
 const WATCH_MS = 8_000
 
 let mainWindow: BrowserWindow | null = null
-let settingsWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let currentSource: RuntimeSource = { kind: 'none' }
 let currentUrl: string | null = null
@@ -40,6 +50,9 @@ let stopHarness: (() => Promise<void>) | null = null
 let quitting = false
 let watchTimer: ReturnType<typeof setInterval> | null = null
 let boundsTimer: ReturnType<typeof setTimeout> | null = null
+const instanceViews = new Map<string, WebContentsView>()
+let overlayCount = 0
+let hostDevToolsOpen = false
 
 function userData(): string {
   return app.getPath('userData')
@@ -126,6 +139,7 @@ function persistWindowBounds(): void {
     }
     const current = loadSettings(userData())
     persistSettings({ ...current, windowBounds: mainWindow.getBounds() })
+    layoutViews()
   }, 300)
 }
 
@@ -152,10 +166,10 @@ function startWatch(url: string): void {
       }
       logShell(`lost ${url}`)
       currentUrl = null
-      currentSource = { kind: 'none' }
-      lastError = 'DeepSeek Harness 已停止响应，已回到外壳。'
+      lastError = 'DeepSeek Harness 已停止响应。'
       stopWatch()
-      showShell()
+      hideInstanceViews()
+      void pushState()
       refreshTray()
     })
   }, WATCH_MS)
@@ -184,35 +198,194 @@ function showMain(): void {
   mainWindow.focus()
 }
 
+function officialViewBlocked(): boolean {
+  return overlayCount > 0 || hostDevToolsOpen
+}
+
+function acquireOverlay(): void {
+  overlayCount += 1
+  layoutViews()
+}
+
+function releaseOverlay(): void {
+  overlayCount = Math.max(0, overlayCount - 1)
+  layoutViews()
+}
+
 function openSettings(): void {
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.show()
-    settingsWindow.focus()
+  if (!mainWindow || mainWindow.isDestroyed()) {
     return
   }
+  acquireOverlay()
+  mainWindow.webContents.send('shellOpenSettings')
+}
 
-  settingsWindow = createSettingsWindow(preloadFile('settings.cjs'), rendererFile('settings.html'))
-  settingsWindow.on('closed', () => {
-    settingsWindow = null
+function closeSettingsOverlay(): void {
+  releaseOverlay()
+}
+
+function isDevHost(): boolean {
+  return Boolean(process.env.VITE_DEV_SERVER_URL)
+}
+
+function reloadHostPage(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+  if (isDevHost()) {
+    mainWindow.webContents.reloadIgnoringCache()
+    return
+  }
+  loadHostPage(mainWindow)
+}
+
+function focusedContents(): WebContents | null {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return null
+  }
+  const activeId = loadSettings(userData()).activeInstanceId
+  if (activeId && !officialViewBlocked()) {
+    const view = instanceViews.get(activeId)
+    if (view && !view.webContents.isDestroyed() && view.webContents.isFocused()) {
+      return view.webContents
+    }
+  }
+  return mainWindow.webContents
+}
+
+function toggleDevTools(target?: WebContents): void {
+  const contents = target && !target.isDestroyed() ? target : focusedContents()
+  if (!contents || contents.isDestroyed()) {
+    return
+  }
+  if (contents.isDevToolsOpened()) {
+    contents.closeDevTools()
+    return
+  }
+  contents.openDevTools({ mode: 'detach' })
+}
+
+function handleHostShortcut(action: HostShortcut, source: WebContents): void {
+  if (action === 'reload-host') {
+    reloadHostPage()
+    return
+  }
+  if (action === 'reconnect') {
+    void connectActive()
+    return
+  }
+  if (action === 'toggle-devtools') {
+    toggleDevTools(source)
+    return
+  }
+  openSettings()
+}
+
+function attachHostShortcuts(contents: WebContents): void {
+  contents.on('before-input-event', (event, input) => {
+    const action = hostShortcutFor(input, {
+      isMac: process.platform === 'darwin',
+      isDev: isDevHost(),
+    })
+    if (!action) {
+      return
+    }
+    event.preventDefault()
+    handleHostShortcut(action, contents)
   })
 }
 
-function showShell(): void {
-  stopWatch()
-  if (!mainWindow || mainWindow.isDestroyed()) {
+function loadHostPage(window: BrowserWindow): void {
+  const devUrl = process.env.VITE_DEV_SERVER_URL
+  if (devUrl) {
+    loadHostUrl(window, devUrl)
     return
   }
-  loadShellPage(mainWindow, rendererFile('shell.html'))
+  loadShellPage(window, rendererFile('index.html'))
 }
 
-function showHarness(url: string): void {
-  currentUrl = url
-  lastError = null
+function ensureHostPage(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
   }
-  loadHarnessPage(mainWindow, url)
+  const current = mainWindow.webContents.getURL()
+  if (isHostPage(current, process.env.VITE_DEV_SERVER_URL)) {
+    return
+  }
+  loadHostPage(mainWindow)
+}
+
+function hideInstanceViews(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+  for (const view of instanceViews.values()) {
+    view.setVisible(false)
+    mainWindow.contentView.removeChildView(view)
+  }
+}
+
+function layoutViews(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+  const activeId = loadSettings(userData()).activeInstanceId
+  const [width, height] = mainWindow.getContentSize()
+  if (!officialViewBlocked()) {
+    layoutActiveView(instanceViews, currentUrl ? activeId : null, { width, height }, TAB_BAR_HEIGHT)
+  }
+  for (const [id, view] of instanceViews) {
+    const show = shouldShowInstanceView({
+      hasUrl: Boolean(currentUrl),
+      instanceId: id,
+      activeId,
+      overlayOpen: officialViewBlocked(),
+    })
+    view.setVisible(show)
+    if (show) {
+      mainWindow.contentView.addChildView(view)
+    } else {
+      mainWindow.contentView.removeChildView(view)
+    }
+  }
+}
+
+function showInstanceView(instanceId: string, url: string): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+  ensureHostPage()
+  let view = instanceViews.get(instanceId)
+  if (!view) {
+    view = new WebContentsView({
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+      },
+    })
+    attachWindowGuards(view.webContents, new URL(url).origin)
+    attachHostShortcuts(view.webContents)
+    instanceViews.set(instanceId, view)
+  }
+  if (view.webContents.getURL() !== url) {
+    void view.webContents.loadURL(url)
+  }
+  currentUrl = url
+  lastError = null
+  layoutViews()
   startWatch(url)
+}
+
+function destroyInstanceViews(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    for (const view of instanceViews.values()) {
+      mainWindow.contentView.removeChildView(view)
+    }
+  }
+  instanceViews.clear()
+  overlayCount = 0
+  hostDevToolsOpen = false
 }
 
 async function stopOwnedHarness(): Promise<void> {
@@ -257,9 +430,15 @@ export type ShellState = {
   url: string | null
   sourceKind: string
   localPort: number
+  instances: Instance[]
+  activeInstanceId: string | null
   managers: PackageManagerOption[]
   lastError: string | null
   lastPackageManager: PackageManagerId | null
+  settingsOpen: boolean
+  openAtLogin: boolean
+  appVersion: string
+  dshVersion: string | null
 }
 
 async function shellState(): Promise<ShellState> {
@@ -268,25 +447,50 @@ async function shellState(): Promise<ShellState> {
     detected: Boolean(currentUrl),
     url: currentUrl,
     sourceKind: currentSource.kind,
-    localPort: settings.localPort,
+    localPort: localPortFromSettings(settings),
+    instances: settings.instances,
+    activeInstanceId: settings.activeInstanceId,
     managers: await detectPackageManagers(lookupOnPath),
     lastError,
     lastPackageManager: settings.lastPackageManager ?? null,
+    settingsOpen: false,
+    openAtLogin: settings.openAtLogin,
+    appVersion: app.getVersion(),
+    dshVersion: currentDshVersion(),
   }
 }
 
-async function connect(opts: { preferShell: boolean } = { preferShell: false }): Promise<void> {
-  await stopOwnedHarness()
+async function pushState(): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+  mainWindow.webContents.send('shellState', await shellState())
+}
+
+async function connectActive(): Promise<void> {
   lastError = null
   currentUrl = null
   stopWatch()
+  ensureHostPage()
+
+  const settings = loadSettings(userData())
+  const active = activeInstance(settings)
+  if (!active) {
+    hideInstanceViews()
+    refreshTray()
+    await pushState()
+    return
+  }
 
   try {
+    if (active.kind === 'remote') {
+      await stopOwnedHarness()
+    }
     const url = await applySource(await discoverRuntime())
     if (url) {
-      currentUrl = url
-      showHarness(url)
+      showInstanceView(active.id, url)
       refreshTray()
+      await pushState()
       return
     }
   } catch (error) {
@@ -297,10 +501,9 @@ async function connect(opts: { preferShell: boolean } = { preferShell: false }):
     logShell(lastError)
   }
 
-  if (opts.preferShell || !currentUrl) {
-    showShell()
-  }
+  hideInstanceViews()
   refreshTray()
+  await pushState()
 }
 
 async function installWithManager(id: PackageManagerId): Promise<ShellState> {
@@ -326,14 +529,19 @@ async function installWithManager(id: PackageManagerId): Promise<ShellState> {
     })
     stopHarness = started.stop
     currentSource = { kind: 'reuse-local', url: started.url }
-    showHarness(started.url)
+    const settings = loadSettings(userData())
+    const local = settings.instances.find((item) => item.kind === 'local') ?? settings.instances[0]
+    if (local) {
+      persistSettings({ ...settings, activeInstanceId: local.id })
+      showInstanceView(local.id, started.url)
+    }
     refreshTray()
   } catch (error) {
     currentSource = { kind: 'none' }
     currentUrl = null
     lastError = error instanceof Error ? error.message : String(error)
     logShell(lastError)
-    showShell()
+    hideInstanceViews()
     refreshTray()
   }
 
@@ -351,11 +559,29 @@ function ensureMainWindow(): BrowserWindow {
     bounds: settings.windowBounds,
   })
   hideInsteadOfClose(mainWindow, () => quitting)
+  attachHostShortcuts(mainWindow.webContents)
+  mainWindow.webContents.on('devtools-opened', () => {
+    hostDevToolsOpen = true
+    layoutViews()
+  })
+  mainWindow.webContents.on('devtools-closed', () => {
+    hostDevToolsOpen = false
+    layoutViews()
+  })
+  mainWindow.once('ready-to-show', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show()
+    }
+  })
   mainWindow.on('resize', persistWindowBounds)
   mainWindow.on('move', persistWindowBounds)
   mainWindow.on('closed', () => {
+    destroyInstanceViews()
+    overlayCount = 0
+    hostDevToolsOpen = false
     mainWindow = null
   })
+  loadHostPage(mainWindow)
   return mainWindow
 }
 
@@ -380,6 +606,7 @@ async function quitApp(): Promise<void> {
   stopWatch()
   persistWindowBounds()
   await stopOwnedHarness()
+  destroyInstanceViews()
   app.quit()
 }
 
@@ -398,19 +625,36 @@ function registerMenu(): void {
                 accelerator: 'CmdOrCtrl+,',
                 click: () => openSettings(),
               },
-              {
-                label: '重新检测',
-                accelerator: 'CmdOrCtrl+R',
-                click: () => {
-                  void connect({ preferShell: true })
-                },
-              },
+              ...(isDevHost()
+                ? [
+                    {
+                      label: '重载宿主页',
+                      accelerator: 'CmdOrCtrl+R',
+                      click: () => reloadHostPage(),
+                    },
+                    {
+                      label: '重新检测',
+                      accelerator: 'Shift+CmdOrCtrl+R',
+                      click: () => {
+                        void connectActive()
+                      },
+                    },
+                  ]
+                : [
+                    {
+                      label: '重新检测',
+                      accelerator: 'CmdOrCtrl+R',
+                      click: () => {
+                        void connectActive()
+                      },
+                    },
+                  ]),
               {
                 label: '检测更新…',
                 click: () => {
                   void inspectUpdates().then((report) => {
-                    if (settingsWindow && !settingsWindow.isDestroyed()) {
-                      settingsWindow.webContents.send('updatesResult', report)
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                      mainWindow.webContents.send('updatesResult', report)
                     }
                   })
                   openSettings()
@@ -438,39 +682,32 @@ function registerMenu(): void {
         { role: 'selectAll' },
       ],
     },
+    {
+      label: '查看',
+      submenu: [
+        {
+          label: '开发者工具',
+          accelerator: 'Alt+CmdOrCtrl+I',
+          click: () => toggleDevTools(),
+        },
+        {
+          label: '开发者工具（控制台）',
+          accelerator: process.platform === 'darwin' ? 'Alt+Command+J' : 'Ctrl+Shift+J',
+          click: () => toggleDevTools(),
+        },
+      ],
+    },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
 function registerIpc(): void {
-  ipcMain.handle('settingsGet', () => ({
-    settings: loadSettings(userData()),
-    sourceKind: currentSource.kind,
-    appVersion: app.getVersion(),
-    lastError,
-  }))
-
-  ipcMain.handle('settingsSave', (_event, settings: Settings) => persistSettings(settings))
-
-  ipcMain.handle('settingsReconnect', async () => {
-    await connect({ preferShell: true })
-  })
-
   ipcMain.handle('settingsCheckUpdates', () => inspectUpdates())
-
-  ipcMain.handle('settingsOpenExternal', (_event, url: string) => {
-    if (
-      url.startsWith('https://www.npmjs.com/package/') ||
-      url.startsWith('https://github.com/')
-    ) {
-      void shell.openExternal(url)
-    }
-  })
 
   ipcMain.handle('shellGetState', () => shellState())
 
   ipcMain.handle('shellDetect', async () => {
-    await connect({ preferShell: true })
+    await connectActive()
     return shellState()
   })
 
@@ -478,6 +715,121 @@ function registerIpc(): void {
 
   ipcMain.handle('shellOpenSettings', () => {
     openSettings()
+  })
+
+  ipcMain.handle('shellCloseSettings', () => {
+    closeSettingsOverlay()
+  })
+
+  ipcMain.handle('shellAcquireOverlay', () => {
+    acquireOverlay()
+  })
+
+  ipcMain.handle('shellReleaseOverlay', () => {
+    releaseOverlay()
+  })
+
+  ipcMain.handle('shellPopupInstanceMenu', async (event, input: { instanceId?: unknown }) => {
+    const instanceId = typeof input?.instanceId === 'string' ? input.instanceId : ''
+    if (!instanceId || !mainWindow || mainWindow.isDestroyed()) {
+      return null
+    }
+    const instance = loadSettings(userData()).instances.find((item) => item.id === instanceId)
+    if (!instance) {
+      return null
+    }
+    return new Promise<'rename' | null>((resolve) => {
+      const menu = Menu.buildFromTemplate([
+        {
+          label: '重命名',
+          click: () => {
+            resolve('rename')
+          },
+        },
+      ])
+      menu.popup({
+        window: mainWindow ?? undefined,
+        callback: () => {
+          resolve(null)
+        },
+      })
+    })
+  })
+
+  ipcMain.handle('shellSelectInstance', async (_event, id: string) => {
+    const next = selectInstance(loadSettings(userData()), id)
+    if (next) {
+      persistSettings(next)
+      await connectActive()
+    }
+    return shellState()
+  })
+
+  ipcMain.handle(
+    'shellAddInstance',
+    async (_event, input: { name: string; kind: 'local' | 'remote'; url: string }) => {
+      const next = upsertInstance(loadSettings(userData()), input)
+      if (!next) {
+        lastError = '远程 URL 必须是 http 或 https'
+        return shellState()
+      }
+      persistSettings(next)
+      await connectActive()
+      return shellState()
+    },
+  )
+
+  ipcMain.handle(
+    'shellUpdateInstance',
+    async (_event, input: { id: string; name: string; url: string }) => {
+      const current = loadSettings(userData()).instances.find((item) => item.id === input.id)
+      if (!current) {
+        return shellState()
+      }
+      const next = upsertInstance(loadSettings(userData()), {
+        id: input.id,
+        name: input.name,
+        kind: current.kind,
+        url: input.url,
+      })
+      if (!next) {
+        lastError = '远程 URL 必须是 http 或 https'
+        return shellState()
+      }
+      persistSettings(next)
+      await connectActive()
+      return shellState()
+    },
+  )
+
+  ipcMain.handle('shellRemoveInstance', async (_event, id: string) => {
+    const next = removeInstance(loadSettings(userData()), id)
+    if (!next) {
+      lastError = '至少保留一个本机实例'
+      return shellState()
+    }
+    const view = instanceViews.get(id)
+    if (view && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.contentView.removeChildView(view)
+    }
+    instanceViews.delete(id)
+    persistSettings(next)
+    await connectActive()
+    return shellState()
+  })
+
+  ipcMain.handle('shellSaveHost', (_event, input: { openAtLogin: boolean }) => {
+    return persistSettings({ ...loadSettings(userData()), openAtLogin: input.openAtLogin === true })
+  })
+
+  ipcMain.handle('shellOpenUserData', () => {
+    void shell.openPath(userData())
+  })
+
+  ipcMain.handle('shellSetTheme', (_event, mode: unknown) => {
+    if (mode === 'light' || mode === 'dark' || mode === 'system') {
+      nativeTheme.themeSource = mode
+    }
   })
 }
 
@@ -508,13 +860,13 @@ void app.whenReady().then(async () => {
     showMain,
     openSettings,
     detect: () => {
-      void connect({ preferShell: true })
+      void connectActive()
     },
     checkUpdates: () => {
       openSettings()
       void inspectUpdates().then((report) => {
-        if (settingsWindow && !settingsWindow.isDestroyed()) {
-          settingsWindow.webContents.send('updatesResult', report)
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('updatesResult', report)
         }
       })
     },
@@ -523,7 +875,7 @@ void app.whenReady().then(async () => {
     },
   })
   ensureMainWindow()
-  await connect({ preferShell: true })
+  await connectActive()
 })
 
 app.on('window-all-closed', () => {
@@ -537,6 +889,6 @@ app.on('activate', () => {
     showMain()
   } else {
     ensureMainWindow()
-    void connect({ preferShell: true })
+    void connectActive()
   }
 })

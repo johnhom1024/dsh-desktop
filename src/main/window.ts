@@ -1,13 +1,15 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, shell, type WebContents } from 'electron'
 import { clampWindowBounds, type WindowBounds } from './host-state.js'
 
-export function attachWindowGuards(window: BrowserWindow, allowedOrigin: string | null): void {
-  window.webContents.setWindowOpenHandler(({ url }) => {
+export { TAB_BAR_HEIGHT } from './instance-views.js'
+
+export function attachWindowGuards(contents: WebContents, allowedOrigin: string | null): void {
+  contents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
     return { action: 'deny' }
   })
 
-  window.webContents.on('will-navigate', (event, url) => {
+  contents.on('will-navigate', (event, url) => {
     if (!allowedOrigin) {
       return
     }
@@ -28,6 +30,8 @@ export function createMainWindow(opts: {
     height: bounds?.height ?? 840,
     x: bounds?.x,
     y: bounds?.y,
+    show: false,
+    backgroundColor: '#eef1f4',
     title: 'DeepSeek Harness',
     webPreferences: {
       preload: opts.preloadPath,
@@ -40,30 +44,12 @@ export function createMainWindow(opts: {
 
 export function loadShellPage(window: BrowserWindow, htmlPath: string): void {
   window.webContents.removeAllListeners('will-navigate')
-  attachWindowGuards(window, new URL(`file://${htmlPath}`).origin)
+  attachWindowGuards(window.webContents, new URL(`file://${htmlPath}`).origin)
   void window.loadFile(htmlPath)
 }
 
-export function loadHarnessPage(window: BrowserWindow, url: string): void {
+export function loadHostUrl(window: BrowserWindow, url: string): void {
   window.webContents.removeAllListeners('will-navigate')
-  attachWindowGuards(window, new URL(url).origin)
+  attachWindowGuards(window.webContents, new URL(url).origin)
   void window.loadURL(url)
-}
-
-export function createSettingsWindow(preloadPath: string, htmlPath: string): BrowserWindow {
-  const window = new BrowserWindow({
-    width: 520,
-    height: 560,
-    title: '连接设置',
-    webPreferences: {
-      preload: preloadPath,
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-    },
-  })
-
-  attachWindowGuards(window, new URL(`file://${htmlPath}`).origin)
-  void window.loadFile(htmlPath)
-  return window
 }
