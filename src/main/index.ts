@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { BrowserWindow, Menu, Tray, WebContentsView, app, ipcMain, nativeTheme, shell, type WebContents } from 'electron'
 import { findNpxCachedDsh, findPnpmDlxCachedDsh, readDshPackage } from './dsh-package.js'
+import { readCliDshVersion } from './dsh-version.js'
 import { startHarnessWeb } from './harness-process.js'
 import { appendHostLog, formatTrayStatus } from './host-state.js'
 import { removeInstance, selectInstance, upsertInstance } from './instances.js'
@@ -91,7 +92,19 @@ function bundledPackage(): { packageRoot: string; version: string } | null {
   return info ? { packageRoot, version: info.version } : null
 }
 
-function currentDshVersion(): string | null {
+function execText(command: string, args: string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(command, args, { timeout: 4000 }, (error, stdout) => {
+      if (error) {
+        resolve(null)
+        return
+      }
+      resolve(stdout)
+    })
+  })
+}
+
+async function currentDshVersion(): Promise<string | null> {
   if (
     currentSource.kind === 'pnpm-dlx' ||
     currentSource.kind === 'npx-cache' ||
@@ -99,7 +112,7 @@ function currentDshVersion(): string | null {
   ) {
     return currentSource.version
   }
-  return bundledPackage()?.version ?? null
+  return (await readCliDshVersion(execText)) ?? bundledPackage()?.version ?? null
 }
 
 function applyOpenAtLogin(enabled: boolean): void {
@@ -456,7 +469,7 @@ async function shellState(): Promise<ShellState> {
     settingsOpen: false,
     openAtLogin: settings.openAtLogin,
     appVersion: app.getVersion(),
-    dshVersion: currentDshVersion(),
+    dshVersion: await currentDshVersion(),
   }
 }
 
@@ -588,7 +601,7 @@ function ensureMainWindow(): BrowserWindow {
 async function inspectUpdates(): Promise<UpdateReport> {
   return checkUpdates({
     appCurrent: app.getVersion(),
-    dshCurrent: currentDshVersion(),
+    dshCurrent: await currentDshVersion(),
     fetchLatest: async (name) => {
       if (name === '@deepseek-ai/dsh') {
         return fetchNpmLatestVersion(name)
