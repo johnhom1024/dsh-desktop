@@ -13,6 +13,8 @@ This repo does **not** fork the official project. The desktop app only starts or
 5. Bundled `@deepseek-ai/dsh` (later)
 6. Saved remote instance, if connection mode is remote
 
+If no official Web UI is found, the app stays on a host shell with **检测** and **设置**. The shell lists package managers already on `PATH` (`pnpm` first, then `npx`, `yarn`, `bunx`) and only runs an install/start command after you confirm. When the printed loopback port becomes ready, the official page opens.
+
 Closing the window hides the app to the menu-bar tray. Quit from the tray. Only a process started by this app is stopped on quit; a reused `3080` instance is left running.
 
 ## Develop

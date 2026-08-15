@@ -1,22 +1,30 @@
+import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { execFile } from 'node:child_process'
 import { BrowserWindow, app, ipcMain } from 'electron'
 import { findNpxCachedDsh, findPnpmDlxCachedDsh, readDshPackage } from './dsh-package.js'
 import { startHarnessWeb } from './harness-process.js'
 import { launchSpecFor } from './launch.js'
+import {
+  detectPackageManagers,
+  lookupOnPath,
+  type PackageManagerId,
+  type PackageManagerOption,
+} from './package-managers.js'
 import { probeHarnessWeb } from './probe.js'
 import { resolveRuntime, type RuntimeSource, type Settings } from './runtime.js'
 import { loadSettings, saveSettings } from './settings.js'
 import { createTray, hideInsteadOfClose } from './tray.js'
-import { createMainWindow, createSettingsWindow } from './window.js'
+import { createMainWindow, createSettingsWindow, loadHarnessPage, loadShellPage } from './window.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let currentSource: RuntimeSource = { kind: 'none' }
+let currentUrl: string | null = null
+let lastError: string | null = null
 let stopHarness: (() => Promise<void>) | null = null
 let quitting = false
 
@@ -66,7 +74,7 @@ function openSettings(): void {
   }
 
   settingsWindow = createSettingsWindow(
-    join(here, '../preload/settings.js'),
+    join(here, '../preload/shell.js'),
     join(app.getAppPath(), 'src/renderer/settings.html'),
   )
   settingsWindow.on('closed', () => {
@@ -74,51 +82,137 @@ function openSettings(): void {
   })
 }
 
-async function connect(): Promise<void> {
-  if (stopHarness) {
-    await stopHarness()
-    stopHarness = null
+function showShell(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
   }
+  loadShellPage(mainWindow, join(app.getAppPath(), 'src/renderer/shell.html'))
+}
 
-  currentSource = await discoverRuntime()
-  const spec = launchSpecFor(currentSource)
-  let url: string | null = null
+function showHarness(url: string): void {
+  currentUrl = url
+  lastError = null
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+  loadHarnessPage(mainWindow, url)
+}
+
+async function stopOwnedHarness(): Promise<void> {
+  if (!stopHarness) {
+    return
+  }
+  await stopHarness()
+  stopHarness = null
+}
+
+async function applySource(source: RuntimeSource): Promise<string | null> {
+  currentSource = source
+  const spec = launchSpecFor(source)
+  if (spec.kind === 'url') {
+    return spec.url
+  }
+  if (spec.kind === 'spawn') {
+    const started = await startHarnessWeb({
+      command: spec.command,
+      args: spec.args,
+      probe: probeHarnessWeb,
+    })
+    stopHarness = started.stop
+    return started.url
+  }
+  return null
+}
+
+export type ShellState = {
+  detected: boolean
+  url: string | null
+  sourceKind: string
+  managers: PackageManagerOption[]
+  lastError: string | null
+}
+
+async function shellState(): Promise<ShellState> {
+  return {
+    detected: Boolean(currentUrl),
+    url: currentUrl,
+    sourceKind: currentSource.kind,
+    managers: await detectPackageManagers(lookupOnPath),
+    lastError,
+  }
+}
+
+async function connect(opts: { preferShell: boolean } = { preferShell: false }): Promise<void> {
+  await stopOwnedHarness()
+  lastError = null
+  currentUrl = null
 
   try {
-    if (spec.kind === 'url') {
-      url = spec.url
-    } else if (spec.kind === 'spawn') {
-      const started = await startHarnessWeb({
-        command: spec.command,
-        args: spec.args,
-        probe: probeHarnessWeb,
-      })
-      stopHarness = started.stop
-      url = started.url
+    const url = await applySource(await discoverRuntime())
+    if (url) {
+      currentUrl = url
+      showHarness(url)
+      return
     }
-  } catch {
+  } catch (error) {
+    lastError = error instanceof Error ? error.message : String(error)
     currentSource = { kind: 'none' }
-    url = null
   }
 
+  if (opts.preferShell || !currentUrl) {
+    showShell()
+  }
+}
+
+async function installWithManager(id: PackageManagerId): Promise<ShellState> {
+  const managers = await detectPackageManagers(lookupOnPath)
+  const chosen = managers.find((item) => item.id === id)
+  if (!chosen) {
+    lastError = '没有找到这个包管理器，请先点检测。'
+    return shellState()
+  }
+
+  await stopOwnedHarness()
+  lastError = null
+
+  try {
+    const started = await startHarnessWeb({
+      command: chosen.commandPath,
+      args: chosen.args,
+      probe: probeHarnessWeb,
+      timeoutMs: 120_000,
+    })
+    stopHarness = started.stop
+    currentSource = { kind: 'reuse-local', url: started.url }
+    showHarness(started.url)
+  } catch (error) {
+    currentSource = { kind: 'none' }
+    currentUrl = null
+    lastError = error instanceof Error ? error.message : String(error)
+    showShell()
+  }
+
+  return shellState()
+}
+
+function ensureMainWindow(): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.removeAllListeners('close')
-    mainWindow.destroy()
+    return mainWindow
   }
 
-  mainWindow = createMainWindow(url)
+  mainWindow = createMainWindow({
+    preloadPath: join(here, '../preload/shell.js'),
+  })
   hideInsteadOfClose(mainWindow, () => quitting)
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+  return mainWindow
 }
 
 async function quitApp(): Promise<void> {
   quitting = true
-  if (stopHarness) {
-    await stopHarness()
-    stopHarness = null
-  }
+  await stopOwnedHarness()
   app.quit()
 }
 
@@ -133,7 +227,20 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('settingsReconnect', async () => {
-    await connect()
+    await connect({ preferShell: true })
+  })
+
+  ipcMain.handle('shellGetState', () => shellState())
+
+  ipcMain.handle('shellDetect', async () => {
+    await connect({ preferShell: true })
+    return shellState()
+  })
+
+  ipcMain.handle('shellInstall', (_event, id: PackageManagerId) => installWithManager(id))
+
+  ipcMain.handle('shellOpenSettings', () => {
+    openSettings()
   })
 }
 
@@ -146,7 +253,8 @@ void app.whenReady().then(async () => {
       void quitApp()
     },
   })
-  await connect()
+  ensureMainWindow()
+  await connect({ preferShell: true })
 })
 
 app.on('window-all-closed', () => {
@@ -159,6 +267,7 @@ app.on('activate', () => {
   if (mainWindow) {
     showMain()
   } else {
-    void connect()
+    ensureMainWindow()
+    void connect({ preferShell: true })
   }
 })
