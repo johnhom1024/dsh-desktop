@@ -1,4 +1,5 @@
 import { BrowserWindow, shell } from 'electron'
+import { clampWindowBounds, type WindowBounds } from './host-state.js'
 
 export function attachWindowGuards(window: BrowserWindow, allowedOrigin: string | null): void {
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -19,10 +20,14 @@ export function attachWindowGuards(window: BrowserWindow, allowedOrigin: string 
 
 export function createMainWindow(opts: {
   preloadPath: string
+  bounds?: WindowBounds
 }): BrowserWindow {
+  const bounds = opts.bounds ? clampWindowBounds(opts.bounds) : undefined
   return new BrowserWindow({
-    width: 1280,
-    height: 840,
+    width: bounds?.width ?? 1280,
+    height: bounds?.height ?? 840,
+    x: bounds?.x,
+    y: bounds?.y,
     title: 'DeepSeek Harness',
     webPreferences: {
       preload: opts.preloadPath,
@@ -48,7 +53,7 @@ export function loadHarnessPage(window: BrowserWindow, url: string): void {
 export function createSettingsWindow(preloadPath: string, htmlPath: string): BrowserWindow {
   const window = new BrowserWindow({
     width: 520,
-    height: 480,
+    height: 560,
     title: '连接设置',
     webPreferences: {
       preload: preloadPath,

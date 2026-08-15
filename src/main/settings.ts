@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEFAULT_LOCAL_PORT, type ConnectionMode, type Settings } from './runtime.js'
+import { DEFAULT_LOCAL_PORT, type ConnectionMode, type PackageManagerId, type Settings, type WindowBounds } from './runtime.js'
 
 const DEFAULT_SETTINGS: Settings = {
   connectionMode: 'smart',
@@ -25,6 +25,21 @@ export function parseLocalPort(value: unknown): number | null {
   return port
 }
 
+function parseWindowBounds(value: unknown): WindowBounds | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+  const candidate = value as { x?: unknown; y?: unknown; width?: unknown; height?: unknown }
+  const x = typeof candidate.x === 'number' ? candidate.x : NaN
+  const y = typeof candidate.y === 'number' ? candidate.y : NaN
+  const width = typeof candidate.width === 'number' ? candidate.width : NaN
+  const height = typeof candidate.height === 'number' ? candidate.height : NaN
+  if (![x, y, width, height].every(Number.isFinite)) {
+    return null
+  }
+  return { x, y, width, height }
+}
+
 function normalize(raw: unknown): Settings {
   if (!raw || typeof raw !== 'object') {
     return { ...DEFAULT_SETTINGS }
@@ -35,6 +50,8 @@ function normalize(raw: unknown): Settings {
     remoteUrl?: unknown
     localPort?: unknown
     openAtLogin?: unknown
+    lastPackageManager?: unknown
+    windowBounds?: unknown
   }
   const connectionMode: ConnectionMode =
     candidate.connectionMode === 'local-only' ||
@@ -54,6 +71,20 @@ function normalize(raw: unknown): Settings {
     next.remoteUrl = candidate.remoteUrl
   }
 
+  if (
+    candidate.lastPackageManager === 'pnpm' ||
+    candidate.lastPackageManager === 'npm' ||
+    candidate.lastPackageManager === 'yarn' ||
+    candidate.lastPackageManager === 'bun'
+  ) {
+    next.lastPackageManager = candidate.lastPackageManager
+  }
+
+  const bounds = parseWindowBounds(candidate.windowBounds)
+  if (bounds) {
+    next.windowBounds = bounds
+  }
+
   return next
 }
 
@@ -70,6 +101,8 @@ export function saveSettings(
   settings: Omit<Settings, 'localPort' | 'openAtLogin'> & {
     localPort?: unknown
     openAtLogin?: unknown
+    lastPackageManager?: unknown
+    windowBounds?: unknown
   },
 ): boolean {
   if (settings.localPort !== undefined && parseLocalPort(settings.localPort) === null) {

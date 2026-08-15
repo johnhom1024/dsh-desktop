@@ -122,3 +122,21 @@ test('saveSettings then loadSettings round-trips openAtLogin', async () => {
   )
   deepEqual(loadSettings(dir), { ...DEFAULTS, openAtLogin: true })
 })
+
+test('saveSettings then loadSettings round-trips lastPackageManager and window bounds', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+
+  equal(
+    saveSettings(dir, {
+      connectionMode: 'smart',
+      lastPackageManager: 'pnpm',
+      windowBounds: { x: 40, y: 60, width: 1400, height: 900 },
+    }),
+    true,
+  )
+  deepEqual(loadSettings(dir), {
+    ...DEFAULTS,
+    lastPackageManager: 'pnpm',
+    windowBounds: { x: 40, y: 60, width: 1400, height: 900 },
+  })
+})

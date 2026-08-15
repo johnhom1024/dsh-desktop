@@ -116,6 +116,22 @@ test('remote mode uses saved url and skips local discovery', async () => {
   deepEqual(source, { kind: 'remote', url: 'http://192.168.31.229:3080' })
 })
 
+test('remote mode stays remote even when the saved url is unreachable', async () => {
+  const source = await resolveRuntime({
+    settings: settings({
+      connectionMode: 'remote',
+      remoteUrl: 'http://192.168.31.229:3080',
+    }),
+    probe: async () => false,
+    whichDsh: async () => '/usr/local/bin/dsh',
+    findPnpmDlx: async () => pnpmDlx,
+    findNpxCache: async () => npxCache,
+    bundled,
+  })
+
+  deepEqual(source, { kind: 'remote', url: 'http://192.168.31.229:3080' })
+})
+
 test('local-only mode never returns a remote source', async () => {
   const source = await resolveRuntime({
     settings: settings({

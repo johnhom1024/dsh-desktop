@@ -67,3 +67,33 @@ test('startHarnessWeb stops the child and throws when the url never appears', as
     /did not print a loopback url/i,
   )
 })
+
+test('startHarnessWeb forwards stdout and stderr through onOutput', async () => {
+  const script = join(tmpdir(), `fake-dsh-log-${Date.now()}.mjs`)
+  await writeFile(
+    script,
+    `
+console.log('preparing package')
+console.error('downloading tarball')
+`,
+    'utf8',
+  )
+
+  const chunks: string[] = []
+  await rejects(
+    () =>
+      startHarnessWeb({
+        command: process.execPath,
+        args: [script],
+        probe: async () => false,
+        timeoutMs: 2000,
+        onOutput: (text) => {
+          chunks.push(text)
+        },
+      }),
+    /exited before becoming ready/i,
+  )
+
+  match(chunks.join(''), /preparing package/)
+  match(chunks.join(''), /downloading tarball/)
+})

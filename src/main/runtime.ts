@@ -1,12 +1,22 @@
 export type ConnectionMode = 'smart' | 'local-only' | 'remote'
+export type PackageManagerId = 'pnpm' | 'npm' | 'yarn' | 'bun'
 
 export const DEFAULT_LOCAL_PORT = 3080
+
+export type WindowBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 export type Settings = {
   connectionMode: ConnectionMode
   localPort: number
   remoteUrl?: string
   openAtLogin: boolean
+  lastPackageManager?: PackageManagerId
+  windowBounds?: WindowBounds
 }
 
 export type DshPackage = {

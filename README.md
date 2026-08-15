@@ -19,7 +19,9 @@ Closing the window hides the app to the menu-bar tray. Quit from the tray. Only 
 
 Packaged launches from Finder often miss Homebrew / pnpm. The host prepends `/opt/homebrew/bin`, `/usr/local/bin`, and the user's pnpm homes, and also reads `export PATH=` lines from `~/.zprofile` / `~/.zshrc` without executing those files.
 
-Settings can enable **open at login** (packaged app only; writes a macOS login item and starts hidden to the tray). **Check for updates** compares `@deepseek-ai/dsh` against the npm registry. `dsh-app` itself is not published to npm, so the app version is shown but not auto-compared.
+Install/start output is streamed on the host shell and appended to `web.log` under Electron `userData`. Host events go to `shell.log`. Remote mode never falls back to spawning a local process: if the saved URL is down, settings show **远程实例不可达**. After a successful connect, the menu and tray still expose **设置** / **重新检测**. Window size is remembered. If a connected page stops answering, the host returns to the shell.
+
+Settings can enable **open at login** (packaged app only; writes a macOS login item and starts hidden to the tray). **Check for updates** compares `@deepseek-ai/dsh` against npm. If `DSH_APP_GITHUB_REPO` is set (`owner/repo`), the app version is compared to that repo's latest GitHub release tag. `dsh-app` itself is not published to npm.
 
 ## Package
 
@@ -29,7 +31,7 @@ Unsigned Apple Silicon DMG (no notarization):
 pnpm dist:mac
 ```
 
-Output: `release/dsh-app-0.1.0-arm64.dmg`. macOS will warn that the app is unsigned; open it from Finder or right-click → Open.
+Output: `release/dsh-app-0.1.0-arm64.dmg` plus `release/SHA256SUMS.txt`. macOS will warn that the app is unsigned; open it from Finder or right-click → Open. Code signing / notarization needs an Apple Developer ID and is not done here.
 
 ## Develop
 

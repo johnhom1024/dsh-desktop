@@ -114,6 +114,30 @@ export async function checkUpdates(input: {
   }
 }
 
+export async function fetchGithubLatestTag(repo: string): Promise<string | null> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
+
+  try {
+    const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+      signal: controller.signal,
+      headers: { accept: 'application/vnd.github+json', 'user-agent': 'dsh-app' },
+    })
+    if (!response.ok) {
+      return null
+    }
+    const body = (await response.json()) as { tag_name?: unknown }
+    if (typeof body.tag_name !== 'string') {
+      return null
+    }
+    return body.tag_name.replace(/^v/, '')
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function fetchNpmLatestVersion(packageName: string): Promise<string | null> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 8000)

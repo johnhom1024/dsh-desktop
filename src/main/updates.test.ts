@@ -57,3 +57,14 @@ test('checkUpdates stays quiet when latest cannot be fetched', async () => {
   equal(report.dsh.current, null)
   equal(report.dsh.updateAvailable, false)
 })
+
+test('checkUpdates can take a GitHub tag as the app latest version', async () => {
+  const report = await checkUpdates({
+    appCurrent: '0.1.0',
+    dshCurrent: null,
+    fetchLatest: async (name) => (name === 'dsh-app' ? '0.2.0' : null),
+  })
+
+  equal(report.app.updateAvailable, true)
+  equal(report.app.latest, '0.2.0')
+})

@@ -35,6 +35,7 @@
     </label>
     <p class="hint">会写入 macOS 登录项，启动后藏在托盘。开发模式（<code>pnpm dev</code>）下不一定生效。</p>
     <p class="status" id="sourceLine">当前来源：<span id="source">unknown</span></p>
+    <p class="status" id="errorLine"></p>
     <p class="status" id="updateStatus">应用版本：…</p>
     <div class="row">
       <button id="save" type="button">保存</button>
@@ -47,6 +48,7 @@
       const remoteUrl = document.querySelector('#remoteUrl')
       const openAtLogin = document.querySelector('#openAtLogin')
       const source = document.querySelector('#source')
+      const errorLine = document.querySelector('#errorLine')
       const updateStatus = document.querySelector('#updateStatus')
       const api = window.dshSettings
 
@@ -77,6 +79,7 @@
         remoteUrl.value = view.settings.remoteUrl || ''
         openAtLogin.checked = Boolean(view.settings.openAtLogin)
         source.textContent = view.sourceKind
+        errorLine.textContent = view.lastError || ''
         updateStatus.textContent = '应用版本：' + (view.appVersion || 'unknown')
       }
 

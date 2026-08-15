@@ -85,6 +85,18 @@
       .option span { color: var(--muted); font-size: 13px; }
       .status { min-height: 1.5em; }
       .status.error { color: var(--danger); }
+      pre.log {
+        margin: 16px 0 0;
+        max-height: 220px;
+        overflow: auto;
+        padding: 12px;
+        border-radius: 8px;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -105,6 +117,7 @@
         <div id="options" class="options"></div>
         <button id="install" class="primary" type="button" disabled>确认并启动</button>
         <p id="status" class="status">正在检测本机环境…</p>
+        <pre id="log" class="log"></pre>
       </section>
     </main>
     <script>
@@ -112,12 +125,23 @@
       const optionsEl = document.querySelector('#options')
       const installBtn = document.querySelector('#install')
       const statusEl = document.querySelector('#status')
+      const logEl = document.querySelector('#log')
       let selectedId = null
       let busy = false
 
       function setStatus(text, isError) {
         statusEl.textContent = text
         statusEl.classList.toggle('error', Boolean(isError))
+      }
+
+      function appendLog(text) {
+        logEl.style.display = 'block'
+        logEl.textContent += text
+        logEl.scrollTop = logEl.scrollHeight
+      }
+
+      if (api.onInstallLog) {
+        api.onInstallLog(appendLog)
       }
 
       function render(state) {
@@ -131,7 +155,9 @@
         document.querySelector('#localHint').textContent = '127.0.0.1:' + port
         selectedId = state.managers.some((item) => item.id === selectedId)
           ? selectedId
-          : (state.managers[0] && state.managers[0].id) || null
+          : state.lastPackageManager && state.managers.some((item) => item.id === state.lastPackageManager)
+            ? state.lastPackageManager
+            : (state.managers[0] && state.managers[0].id) || null
 
         if (!state.managers.length) {
           optionsEl.innerHTML = '<p>没有在 PATH 里找到 pnpm、npx、yarn 或 bunx。请先安装其中一个，或到设置里改连远程实例。</p>'

@@ -52,6 +52,7 @@ export async function startHarnessWeb(opts: {
   env?: NodeJS.ProcessEnv
   probe: (url: string) => Promise<boolean>
   timeoutMs?: number
+  onOutput?: (text: string) => void
 }): Promise<{ url: string; child: ChildProcess; stop: () => Promise<void> }> {
   const timeoutMs = opts.timeoutMs ?? 20_000
   const child = spawn(opts.command, opts.args, {
@@ -86,7 +87,9 @@ export async function startHarnessWeb(opts: {
     }, timeoutMs)
 
     const onChunk = (chunk: Buffer): void => {
-      output += chunk.toString('utf8')
+      const text = chunk.toString('utf8')
+      output += text
+      opts.onOutput?.(text)
       const url = parseHarnessWebUrl(output)
       if (!url || settled) {
         return

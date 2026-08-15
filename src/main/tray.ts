@@ -3,6 +3,7 @@ import { Menu, Tray, nativeImage, type BrowserWindow } from 'electron'
 export function createTray(opts: {
   showMain: () => void
   openSettings: () => void
+  detect: () => void
   checkUpdates: () => void
   quit: () => void
 }): Tray {
@@ -12,6 +13,7 @@ export function createTray(opts: {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '显示窗口', click: opts.showMain },
+      { label: '重新检测', click: opts.detect },
       { label: '连接设置', click: opts.openSettings },
       { label: '检测更新', click: opts.checkUpdates },
       { type: 'separator' },
@@ -20,6 +22,11 @@ export function createTray(opts: {
   )
   tray.on('click', opts.showMain)
   return tray
+}
+
+export function setTrayStatus(tray: Tray, text: string): void {
+  tray.setToolTip(`DeepSeek Harness · ${text}`)
+  tray.setTitle(text.startsWith('已连接') ? 'dsh ✓' : 'dsh')
 }
 
 export function hideInsteadOfClose(window: BrowserWindow, isQuitting: () => boolean): void {

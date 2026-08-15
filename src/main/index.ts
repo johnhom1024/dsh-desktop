@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, app, ipcMain, shell } from 'electron'
+import { BrowserWindow, Menu, Tray, app, ipcMain, shell } from 'electron'
 import { findNpxCachedDsh, findPnpmDlxCachedDsh, readDshPackage } from './dsh-package.js'
 import { startHarnessWeb } from './harness-process.js'
+import { appendHostLog, formatTrayStatus } from './host-state.js'
 import { launchSpecFor } from './launch.js'
 import {
   detectPackageManagers,
@@ -11,23 +12,53 @@ import {
   type PackageManagerId,
   type PackageManagerOption,
 } from './package-managers.js'
+import { repairProcessPath } from './path-repair.js'
 import { preloadFile, rendererFile } from './paths.js'
 import { probeHarnessWeb } from './probe.js'
 import { resolveRuntime, type RuntimeSource, type Settings } from './runtime.js'
 import { loadSettings, saveSettings } from './settings.js'
 import { bindSingleInstance } from './single-instance.js'
-import { repairProcessPath } from './path-repair.js'
-import { createTray, hideInsteadOfClose } from './tray.js'
-import { checkUpdates, fetchNpmLatestVersion, type UpdateReport } from './updates.js'
+import { createTray, hideInsteadOfClose, setTrayStatus } from './tray.js'
+import {
+  checkUpdates,
+  fetchGithubLatestTag,
+  fetchNpmLatestVersion,
+  type UpdateReport,
+} from './updates.js'
 import { createMainWindow, createSettingsWindow, loadHarnessPage, loadShellPage } from './window.js'
+
+const GITHUB_REPO = process.env.DSH_APP_GITHUB_REPO ?? ''
+const WATCH_MS = 8_000
 
 let mainWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
+let tray: Tray | null = null
 let currentSource: RuntimeSource = { kind: 'none' }
 let currentUrl: string | null = null
 let lastError: string | null = null
 let stopHarness: (() => Promise<void>) | null = null
 let quitting = false
+let watchTimer: ReturnType<typeof setInterval> | null = null
+let boundsTimer: ReturnType<typeof setTimeout> | null = null
+
+function userData(): string {
+  return app.getPath('userData')
+}
+
+function logShell(text: string): void {
+  appendHostLog(userData(), 'shell.log', text)
+}
+
+function logWeb(text: string): void {
+  appendHostLog(userData(), 'web.log', text)
+}
+
+function emitInstallLog(text: string): void {
+  logWeb(text)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('shellInstallLog', text)
+  }
+}
 
 function whichDsh(): Promise<string | null> {
   return new Promise((resolve) => {
@@ -69,16 +100,70 @@ function applyOpenAtLogin(enabled: boolean): void {
 }
 
 function persistSettings(settings: Settings): boolean {
-  const ok = saveSettings(app.getPath('userData'), settings)
+  const current = loadSettings(userData())
+  const ok = saveSettings(userData(), {
+    ...current,
+    ...settings,
+    lastPackageManager: settings.lastPackageManager ?? current.lastPackageManager,
+    windowBounds: settings.windowBounds ?? current.windowBounds,
+  })
   if (ok) {
-    applyOpenAtLogin(loadSettings(app.getPath('userData')).openAtLogin)
+    applyOpenAtLogin(loadSettings(userData()).openAtLogin)
   }
   return ok
 }
 
+function persistWindowBounds(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+  if (boundsTimer) {
+    clearTimeout(boundsTimer)
+  }
+  boundsTimer = setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return
+    }
+    const current = loadSettings(userData())
+    persistSettings({ ...current, windowBounds: mainWindow.getBounds() })
+  }, 300)
+}
+
+function refreshTray(): void {
+  if (!tray) {
+    return
+  }
+  setTrayStatus(tray, formatTrayStatus(currentSource, currentUrl))
+}
+
+function stopWatch(): void {
+  if (watchTimer) {
+    clearInterval(watchTimer)
+    watchTimer = null
+  }
+}
+
+function startWatch(url: string): void {
+  stopWatch()
+  watchTimer = setInterval(() => {
+    void probeHarnessWeb(url).then((ok) => {
+      if (ok || quitting) {
+        return
+      }
+      logShell(`lost ${url}`)
+      currentUrl = null
+      currentSource = { kind: 'none' }
+      lastError = 'DeepSeek Harness 已停止响应，已回到外壳。'
+      stopWatch()
+      showShell()
+      refreshTray()
+    })
+  }, WATCH_MS)
+}
+
 async function discoverRuntime(): Promise<RuntimeSource> {
   return resolveRuntime({
-    settings: loadSettings(app.getPath('userData')),
+    settings: loadSettings(userData()),
     probe: probeHarnessWeb,
     whichDsh,
     findPnpmDlx: async () =>
@@ -113,6 +198,7 @@ function openSettings(): void {
 }
 
 function showShell(): void {
+  stopWatch()
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
   }
@@ -126,6 +212,7 @@ function showHarness(url: string): void {
     return
   }
   loadHarnessPage(mainWindow, url)
+  startWatch(url)
 }
 
 async function stopOwnedHarness(): Promise<void> {
@@ -138,6 +225,16 @@ async function stopOwnedHarness(): Promise<void> {
 
 async function applySource(source: RuntimeSource): Promise<string | null> {
   currentSource = source
+  if (source.kind === 'remote') {
+    const reachable = await probeHarnessWeb(source.url)
+    if (!reachable) {
+      lastError = `远程实例不可达：${source.url}`
+      currentUrl = null
+      return null
+    }
+    return source.url
+  }
+
   const spec = launchSpecFor(source)
   if (spec.kind === 'url') {
     return spec.url
@@ -147,6 +244,7 @@ async function applySource(source: RuntimeSource): Promise<string | null> {
       command: spec.command,
       args: spec.args,
       probe: probeHarnessWeb,
+      onOutput: emitInstallLog,
     })
     stopHarness = started.stop
     return started.url
@@ -161,10 +259,11 @@ export type ShellState = {
   localPort: number
   managers: PackageManagerOption[]
   lastError: string | null
+  lastPackageManager: PackageManagerId | null
 }
 
 async function shellState(): Promise<ShellState> {
-  const settings = loadSettings(app.getPath('userData'))
+  const settings = loadSettings(userData())
   return {
     detected: Boolean(currentUrl),
     url: currentUrl,
@@ -172,6 +271,7 @@ async function shellState(): Promise<ShellState> {
     localPort: settings.localPort,
     managers: await detectPackageManagers(lookupOnPath),
     lastError,
+    lastPackageManager: settings.lastPackageManager ?? null,
   }
 }
 
@@ -179,22 +279,28 @@ async function connect(opts: { preferShell: boolean } = { preferShell: false }):
   await stopOwnedHarness()
   lastError = null
   currentUrl = null
+  stopWatch()
 
   try {
     const url = await applySource(await discoverRuntime())
     if (url) {
       currentUrl = url
       showHarness(url)
+      refreshTray()
       return
     }
   } catch (error) {
     lastError = error instanceof Error ? error.message : String(error)
-    currentSource = { kind: 'none' }
+    if (currentSource.kind !== 'remote') {
+      currentSource = { kind: 'none' }
+    }
+    logShell(lastError)
   }
 
   if (opts.preferShell || !currentUrl) {
     showShell()
   }
+  refreshTray()
 }
 
 async function installWithManager(id: PackageManagerId): Promise<ShellState> {
@@ -205,8 +311,10 @@ async function installWithManager(id: PackageManagerId): Promise<ShellState> {
     return shellState()
   }
 
+  persistSettings({ ...loadSettings(userData()), lastPackageManager: id })
   await stopOwnedHarness()
   lastError = null
+  emitInstallLog(`$ ${chosen.preview}\n`)
 
   try {
     const started = await startHarnessWeb({
@@ -214,15 +322,19 @@ async function installWithManager(id: PackageManagerId): Promise<ShellState> {
       args: chosen.args,
       probe: probeHarnessWeb,
       timeoutMs: 120_000,
+      onOutput: emitInstallLog,
     })
     stopHarness = started.stop
     currentSource = { kind: 'reuse-local', url: started.url }
     showHarness(started.url)
+    refreshTray()
   } catch (error) {
     currentSource = { kind: 'none' }
     currentUrl = null
     lastError = error instanceof Error ? error.message : String(error)
+    logShell(lastError)
     showShell()
+    refreshTray()
   }
 
   return shellState()
@@ -233,10 +345,14 @@ function ensureMainWindow(): BrowserWindow {
     return mainWindow
   }
 
+  const settings = loadSettings(userData())
   mainWindow = createMainWindow({
     preloadPath: preloadFile('shell.js'),
+    bounds: settings.windowBounds,
   })
   hideInsteadOfClose(mainWindow, () => quitting)
+  mainWindow.on('resize', persistWindowBounds)
+  mainWindow.on('move', persistWindowBounds)
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -251,6 +367,9 @@ async function inspectUpdates(): Promise<UpdateReport> {
       if (name === '@deepseek-ai/dsh') {
         return fetchNpmLatestVersion(name)
       }
+      if (name === 'dsh-app' && GITHUB_REPO) {
+        return fetchGithubLatestTag(GITHUB_REPO)
+      }
       return null
     },
   })
@@ -258,6 +377,8 @@ async function inspectUpdates(): Promise<UpdateReport> {
 
 async function quitApp(): Promise<void> {
   quitting = true
+  stopWatch()
+  persistWindowBounds()
   await stopOwnedHarness()
   app.quit()
 }
@@ -276,6 +397,13 @@ function registerMenu(): void {
                 label: '设置…',
                 accelerator: 'CmdOrCtrl+,',
                 click: () => openSettings(),
+              },
+              {
+                label: '重新检测',
+                accelerator: 'CmdOrCtrl+R',
+                click: () => {
+                  void connect({ preferShell: true })
+                },
               },
               {
                 label: '检测更新…',
@@ -316,9 +444,10 @@ function registerMenu(): void {
 
 function registerIpc(): void {
   ipcMain.handle('settingsGet', () => ({
-    settings: loadSettings(app.getPath('userData')),
+    settings: loadSettings(userData()),
     sourceKind: currentSource.kind,
     appVersion: app.getVersion(),
+    lastError,
   }))
 
   ipcMain.handle('settingsSave', (_event, settings: Settings) => persistSettings(settings))
@@ -330,7 +459,10 @@ function registerIpc(): void {
   ipcMain.handle('settingsCheckUpdates', () => inspectUpdates())
 
   ipcMain.handle('settingsOpenExternal', (_event, url: string) => {
-    if (url.startsWith('https://www.npmjs.com/package/')) {
+    if (
+      url.startsWith('https://www.npmjs.com/package/') ||
+      url.startsWith('https://github.com/')
+    ) {
       void shell.openExternal(url)
     }
   })
@@ -371,10 +503,13 @@ if (
 void app.whenReady().then(async () => {
   registerIpc()
   registerMenu()
-  applyOpenAtLogin(loadSettings(app.getPath('userData')).openAtLogin)
-  createTray({
+  applyOpenAtLogin(loadSettings(userData()).openAtLogin)
+  tray = createTray({
     showMain,
     openSettings,
+    detect: () => {
+      void connect({ preferShell: true })
+    },
     checkUpdates: () => {
       openSettings()
       void inspectUpdates().then((report) => {

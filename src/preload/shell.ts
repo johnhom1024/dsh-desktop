@@ -10,6 +10,7 @@ export type ShellState = {
   localPort: number
   managers: PackageManagerOption[]
   lastError: string | null
+  lastPackageManager: string | null
 }
 
 contextBridge.exposeInMainWorld('dshShell', {
@@ -18,6 +19,13 @@ contextBridge.exposeInMainWorld('dshShell', {
   install: (id: PackageManagerOption['id']): Promise<ShellState> =>
     ipcRenderer.invoke('shellInstall', id),
   openSettings: (): Promise<void> => ipcRenderer.invoke('shellOpenSettings'),
+  onInstallLog: (listener: (text: string) => void) => {
+    const wrapped = (_event: unknown, text: string) => listener(text)
+    ipcRenderer.on('shellInstallLog', wrapped)
+    return () => {
+      ipcRenderer.removeListener('shellInstallLog', wrapped)
+    }
+  },
 })
 
 contextBridge.exposeInMainWorld('dshSettings', {
