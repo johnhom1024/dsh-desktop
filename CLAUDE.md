@@ -1,4 +1,4 @@
-# dsh-app
+# dsh-desktop
 
 薄 Electron 宿主，不 fork 官方 DeepSeek Harness。宿主顶栏用 React + Tailwind + shadcn；官方 UI 是顶栏下面的 `WebContentsView`。
 

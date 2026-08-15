@@ -66,7 +66,7 @@ function makeApi(overrides: Partial<DshShellApi> = {}) {
     popupInstanceMenu: async () => null,
     saveHost: async () => true,
     checkUpdates: async () => ({
-      app: { name: 'dsh-app', current: '0.1.0', latest: '0.1.0', updateAvailable: false },
+      app: { name: 'dsh-desktop', current: '0.1.0', latest: '0.1.0', updateAvailable: false },
       dsh: { name: '@deepseek-ai/dsh', current: '0.2.0', latest: '0.2.0', updateAvailable: false },
     }),
     openUserData: async () => undefined,

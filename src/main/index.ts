@@ -38,7 +38,7 @@ import {
 } from './updates.js'
 import { attachWindowGuards, createMainWindow, loadHostUrl, loadShellPage } from './window.js'
 
-const GITHUB_REPO = process.env.DSH_APP_GITHUB_REPO ?? ''
+const GITHUB_REPO = process.env.DSH_DESKTOP_GITHUB_REPO ?? process.env.DSH_APP_GITHUB_REPO ?? ''
 const WATCH_MS = 8_000
 
 let mainWindow: BrowserWindow | null = null
@@ -593,7 +593,7 @@ async function inspectUpdates(): Promise<UpdateReport> {
       if (name === '@deepseek-ai/dsh') {
         return fetchNpmLatestVersion(name)
       }
-      if (name === 'dsh-app' && GITHUB_REPO) {
+      if ((name === 'dsh-desktop' || name === 'dsh-app') && GITHUB_REPO) {
         return fetchGithubLatestTag(GITHUB_REPO)
       }
       return null

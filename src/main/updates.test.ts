@@ -19,7 +19,7 @@ test('checkUpdates reports app and dsh updates from the registry', async () => {
     appCurrent: '0.1.0',
     dshCurrent: '0.1.0-rc.6',
     fetchLatest: async (name) => {
-      if (name === 'dsh-app') {
+      if (name === 'dsh-desktop') {
         return '0.2.0'
       }
       if (name === '@deepseek-ai/dsh') {
@@ -31,7 +31,7 @@ test('checkUpdates reports app and dsh updates from the registry', async () => {
 
   deepEqual(report, {
     app: {
-      name: 'dsh-app',
+      name: 'dsh-desktop',
       current: '0.1.0',
       latest: '0.2.0',
       updateAvailable: true,
@@ -62,7 +62,7 @@ test('checkUpdates can take a GitHub tag as the app latest version', async () =>
   const report = await checkUpdates({
     appCurrent: '0.1.0',
     dshCurrent: null,
-    fetchLatest: async (name) => (name === 'dsh-app' ? '0.2.0' : null),
+    fetchLatest: async (name) => (name === 'dsh-desktop' ? '0.2.0' : null),
   })
 
   equal(report.app.updateAvailable, true)

@@ -92,13 +92,13 @@ export async function checkUpdates(input: {
   fetchLatest: (packageName: string) => Promise<string | null>
 }): Promise<UpdateReport> {
   const [appLatest, dshLatest] = await Promise.all([
-    input.fetchLatest('dsh-app'),
+    input.fetchLatest('dsh-desktop'),
     input.fetchLatest('@deepseek-ai/dsh'),
   ])
 
   return {
     app: {
-      name: 'dsh-app',
+      name: 'dsh-desktop',
       current: input.appCurrent,
       latest: appLatest,
       updateAvailable: Boolean(appLatest && isNewerVersion(appLatest, input.appCurrent)),
@@ -121,7 +121,7 @@ export async function fetchGithubLatestTag(repo: string): Promise<string | null>
   try {
     const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
       signal: controller.signal,
-      headers: { accept: 'application/vnd.github+json', 'user-agent': 'dsh-app' },
+      headers: { accept: 'application/vnd.github+json', 'user-agent': 'dsh-desktop' },
     })
     if (!response.ok) {
       return null

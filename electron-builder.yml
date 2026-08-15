@@ -1,5 +1,5 @@
-appId: cn.johnhong.dsh-app
-productName: dsh-app
+appId: cn.johnhong.dsh-desktop
+productName: dsh-desktop
 copyright: Copyright © 2026 johnhom
 npmRebuild: false
 directories:
@@ -19,4 +19,4 @@ mac:
   gatekeeperAssess: false
 dmg:
   artifactName: ${productName}-${version}-${arch}.dmg
-  title: dsh-app ${version}
+  title: dsh-desktop ${version}

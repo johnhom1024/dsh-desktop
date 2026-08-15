@@ -1,5 +1,5 @@
 {
-  "name": "dsh-app",
+  "name": "dsh-desktop",
   "version": "0.1.0",
   "private": true,
   "description": "Thin Electron host for DeepSeek Harness. Does not fork the official repo.",

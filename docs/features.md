@@ -1,4 +1,4 @@
-# dsh-app 功能说明
+# dsh-desktop 功能说明
 
 版本 `0.1.0`。薄 Electron 宿主：不 fork、不改官方 DeepSeek Harness UI。桌面端只负责启动或连接 `dsh web`，把官方页面放进窗口。
 
@@ -124,9 +124,9 @@
 | 比较对象 | 数据来源 |
 | --- | --- |
 | `@deepseek-ai/dsh` | npm `latest`，与本机缓存 / 内置版本比（含 rc） |
-| `dsh-app` 壳本身 | 仅当环境变量 `DSH_APP_GITHUB_REPO=owner/repo` 有值时，查该仓库 latest release tag |
+| `dsh-desktop` 壳本身 | 仅当环境变量 `DSH_DESKTOP_GITHUB_REPO=owner/repo` 有值时，查该仓库 latest release tag |
 
-`dsh-app` 没发到 npm，未设置上述变量时只显示当前应用版本，不会误报有新包。拉不到 latest 时 `updateAvailable` 为 false。不做 `electron-updater` 自动下载。
+`dsh-desktop` 没发到 npm，未设置上述变量时只显示当前应用版本，不会误报有新包。拉不到 latest 时 `updateAvailable` 为 false。不做 `electron-updater` 自动下载。
 
 ---
 
@@ -156,7 +156,7 @@
 
 `userData` 在 macOS 上一般是：
 
-`~/Library/Application Support/dsh-app/`
+`~/Library/Application Support/dsh-desktop/`
 
 ---
 
@@ -185,12 +185,12 @@ pnpm dist:mac
 
 产物：
 
-- `release/dsh-app-0.1.0-arm64.dmg`（未签名、未公证，约 100MB）
+- `release/dsh-desktop-0.1.0-arm64.dmg`（未签名、未公证，约 100MB）
 - `release/SHA256SUMS.txt`
 
 说明：
 
-- `appId`: `cn.johnhong.dsh-app`
+- `appId`: `cn.johnhong.dsh-desktop`
 - 图标由 `scripts/write-icon.mjs` 生成蓝色圆形 PNG（256×256）
 - 打开未签名应用：访达里右键 → 打开
 - **签名 + 公证需要 Apple Developer ID，当前不做**
