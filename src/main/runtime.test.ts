@@ -3,17 +3,20 @@ import { test } from 'node:test'
 import { resolveRuntime, type Settings } from './runtime.js'
 
 const bundled = { packageRoot: '/app/node_modules/@deepseek-ai/dsh', version: '0.1.0' }
+const pnpmDlx = { packageRoot: '/pnpm/dlx/dsh', version: '0.1.0-rc.6' }
+const npxCache = { packageRoot: '/npx/dsh', version: '0.1.0' }
 
 function settings(partial: Partial<Settings> = {}): Settings {
   return { connectionMode: 'smart', ...partial }
 }
 
-test('smart mode reuses local 3080 before path, npx, or bundled', async () => {
+test('smart mode reuses local 3080 before path, pnpm dlx, npx, or bundled', async () => {
   const source = await resolveRuntime({
     settings: settings(),
     probe: async () => true,
     whichDsh: async () => '/usr/local/bin/dsh',
-    findNpxCache: async () => ({ packageRoot: '/npx/dsh', version: '0.1.0' }),
+    findPnpmDlx: async () => pnpmDlx,
+    findNpxCache: async () => npxCache,
     bundled,
   })
 
@@ -25,18 +28,37 @@ test('smart mode uses path dsh when 3080 is not official ui', async () => {
     settings: settings(),
     probe: async () => false,
     whichDsh: async () => '/usr/local/bin/dsh',
-    findNpxCache: async () => ({ packageRoot: '/npx/dsh', version: '0.1.0' }),
+    findPnpmDlx: async () => pnpmDlx,
+    findNpxCache: async () => npxCache,
     bundled,
   })
 
   deepEqual(source, { kind: 'path-dsh', command: '/usr/local/bin/dsh' })
 })
 
-test('smart mode uses npx cache when path dsh is missing', async () => {
+test('smart mode prefers pnpm dlx over npx cache', async () => {
   const source = await resolveRuntime({
     settings: settings(),
     probe: async () => false,
     whichDsh: async () => null,
+    findPnpmDlx: async () => pnpmDlx,
+    findNpxCache: async () => npxCache,
+    bundled,
+  })
+
+  deepEqual(source, {
+    kind: 'pnpm-dlx',
+    packageRoot: pnpmDlx.packageRoot,
+    version: pnpmDlx.version,
+  })
+})
+
+test('smart mode uses npx cache when pnpm dlx is missing', async () => {
+  const source = await resolveRuntime({
+    settings: settings(),
+    probe: async () => false,
+    whichDsh: async () => null,
+    findPnpmDlx: async () => null,
     findNpxCache: async () => ({ packageRoot: '/npx/dsh', version: '0.1.0-rc.6' }),
     bundled,
   })
@@ -53,6 +75,7 @@ test('smart mode uses bundled package when cache is empty', async () => {
     settings: settings(),
     probe: async () => false,
     whichDsh: async () => null,
+    findPnpmDlx: async () => null,
     findNpxCache: async () => null,
     bundled,
   })
@@ -69,6 +92,7 @@ test('smart mode returns none when no runtime exists', async () => {
     settings: settings(),
     probe: async () => false,
     whichDsh: async () => null,
+    findPnpmDlx: async () => null,
     findNpxCache: async () => null,
     bundled: null,
   })
@@ -84,7 +108,8 @@ test('remote mode uses saved url and skips local discovery', async () => {
     }),
     probe: async () => true,
     whichDsh: async () => '/usr/local/bin/dsh',
-    findNpxCache: async () => ({ packageRoot: '/npx/dsh', version: '0.1.0' }),
+    findPnpmDlx: async () => pnpmDlx,
+    findNpxCache: async () => npxCache,
     bundled,
   })
 
@@ -99,6 +124,7 @@ test('local-only mode never returns a remote source', async () => {
     }),
     probe: async () => false,
     whichDsh: async () => null,
+    findPnpmDlx: async () => null,
     findNpxCache: async () => null,
     bundled: null,
   })

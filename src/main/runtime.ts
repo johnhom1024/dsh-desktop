@@ -13,6 +13,7 @@ export type DshPackage = {
 export type RuntimeSource =
   | { kind: 'reuse-local'; url: string }
   | { kind: 'path-dsh'; command: string }
+  | { kind: 'pnpm-dlx'; packageRoot: string; version: string }
   | { kind: 'npx-cache'; packageRoot: string; version: string }
   | { kind: 'bundled'; packageRoot: string; version: string }
   | { kind: 'remote'; url: string }
@@ -24,6 +25,7 @@ export async function resolveRuntime(input: {
   settings: Settings
   probe: (url: string) => Promise<boolean>
   whichDsh: () => Promise<string | null>
+  findPnpmDlx: () => Promise<DshPackage | null>
   findNpxCache: () => Promise<DshPackage | null>
   bundled: DshPackage | null
 }): Promise<RuntimeSource> {
@@ -38,6 +40,11 @@ export async function resolveRuntime(input: {
   const command = await input.whichDsh()
   if (command) {
     return { kind: 'path-dsh', command }
+  }
+
+  const pnpmDlx = await input.findPnpmDlx()
+  if (pnpmDlx) {
+    return { kind: 'pnpm-dlx', ...pnpmDlx }
   }
 
   const cached = await input.findNpxCache()
