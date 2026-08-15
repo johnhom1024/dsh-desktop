@@ -10,62 +10,55 @@
 
 | 宿主负责 | 官方 Harness 负责 |
 | --- | --- |
-| 进程、端口、托盘、设置、首次外壳、loopback 导航 | Agent / 官方 Web UI |
+| 进程、端口、托盘、设置、首次空状态、loopback 导航 | Agent / 官方 Web UI |
 
 - 独立仓库，不 fork 官方仓
 - 渲染进程：`nodeIntegration: false`、`contextIsolation: true`、`sandbox: true`
 - 外链走系统浏览器（`openExternal`），不在壳里打开任意站点
-- 只有用户点「确认并启动」后才会执行安装 / 启动命令
+- 只有用户在设置里点「确认并启动」后才会执行安装 / 启动命令；之后会把所选包管理器写入配置
 
 ---
 
 ## 2. 智能连接（运行时解析）
 
-设置里三种模式：
+本机 tab 启动时只做两件事：
 
-| 模式 | 行为 |
-| --- | --- |
-| **智能**（默认） | 按下面顺序找一个可用来源 |
-| **仅本机** | 只走本机探测 / PATH / 缓存 / 内置；绝不返回远程 |
-| **远程实例** | 只用保存的 `remoteUrl`；不可达时**不会**改去拉本机进程 |
+1. 探测已保存的本机端口 `http://127.0.0.1:<localPort>`（默认 **3080**），确认是官方 DeepSeek Harness 页就直接复用
+2. 若 3080 没起来，且设置里已保存过启动命令（`lastPackageManager`），才用这条命令拉起 `dsh web --port 3080`
 
-智能模式顺序：
+没保存过启动命令时**不会**再去扫 PATH 上的 `dsh`、`pnpm dlx` 缓存、npx 缓存或内置包并自动 spawn。这就是以前打开引导页后「我没点确认也开始跑命令」的原因。
 
-1. 探测已保存的本机端口 `http://127.0.0.1:<localPort>`（默认 **3080**），确认是官方 DeepSeek Harness 页
-2. `PATH` 上的 `dsh`
-3. `pnpm dlx` 缓存：`~/Library/Caches/pnpm/dlx`
-4. npx 缓存
-5. 安装包内置的 `@deepseek-ai/dsh`（尚未打进包）
-6. 仅当模式为远程时，使用已保存的远程 URL
+远程 tab 只用保存的远程 URL；不可达时**不会**改去拉本机进程。
 
 退出时：本应用自己拉起的子进程会停掉（含 `pnpm dlx` / `npx` 再拉起的孙进程，按进程组 `SIGTERM` → `SIGKILL`）；复用的本机 3080 **不会**被杀。
 
 ---
 
-## 3. 首次外壳
+## 3. 首次使用与设置里的启动
 
 主窗口永远保留 44px 宿主顶栏。当前先做单实例：左边「设置」tab，右边本机实例 tab。官方 Web 用 `WebContentsView` 贴在顶栏下面。凡是会画出顶栏的宿主 UI（设置页、重命名弹窗、宿主 DevTools 检查）必须先摘掉官方视图；tab 三点菜单用系统原生 `Menu.popup`，不要用 HTML 下拉。详见 [host-overlays.md](host-overlays.md)。多实例（远程 tab / 加号）先关掉，以后再加。
 
-没检测到官方 Web 时，主窗口停在宿主外壳（不是白屏、也不是静默失败）。
+没检测到官方 Web 时，本机 tab 显示空状态：「当前没有启动服务，首次使用请先去设置里设置」。不会在这个容器里列出安装命令，也不会自动执行。
 
-外壳提供：
+设置页提供启动选项：
 
-- **检测**：重新走智能连接
-- **设置**：打开连接设置窗
 - 列出 PATH 里已有的包管理器（**pnpm 优先**，然后 npx / yarn / bunx）
-- 选一个后点 **确认并启动** 才执行命令
-- 子进程打印 loopback URL 且端口就绪后，切到官方页
+- 选一个后点 **确认并启动** 才执行命令，并写入 `lastPackageManager`
+- 确认后先留在设置页，实时显示启动日志；子进程打印 loopback URL 且端口就绪后再切到官方页
+- 应用自己按已保存命令后台拉起时，本机 tab 显示启动中等待动画
 
-确认后实际执行的命令：
+确认后实际执行的命令（固定端口，不再用 `--port 0`）：
 
 | 检测到 | 命令 |
 | --- | --- |
-| pnpm | `pnpm dlx @deepseek-ai/dsh web --port 0` |
-| npx | `npx -y @deepseek-ai/dsh web --port 0` |
-| yarn | `yarn dlx @deepseek-ai/dsh web --port 0` |
-| bunx | `bunx @deepseek-ai/dsh web --port 0` |
+| pnpm | `pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --port 3080` |
+| npx | `npx -y @deepseek-ai/dsh web --port 3080` |
+| yarn | `yarn dlx @deepseek-ai/dsh web --port 3080` |
+| bunx | `bunx @deepseek-ai/dsh web --port 3080` |
 
-`--port 0` 只用于**新拉起**的服务器（由操作系统分配端口）。复用 / 探测用的是设置里保存的 `localPort`，不是 0。
+新拉起和复用 / 探测都用设置里保存的 `localPort`，默认 3080。
+
+pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，答不了这个交互。所以 pnpm 这条命令会带 `dangerouslyAllowAllBuilds`，并设置 `CI=1`，避免卡住。如果日志里仍出现交互提示，宿主会立刻失败并留在设置页，而不是干等到超时。也可以改选 npx。
 
 ---
 
@@ -92,10 +85,10 @@
 | 字段 | 含义 |
 | --- | --- |
 | `connectionMode` | `smart` / `local-only` / `remote` |
-| `localPort` | 1–65535，默认 3080。智能模式先探测这个端口 |
+| `localPort` | 1–65535，默认 3080。本机 tab 先探测这个端口 |
 | `remoteUrl` | 仅 `http:` / `https:` |
 | `openAtLogin` | 登录自启，默认关 |
-| `lastPackageManager` | 上次在外壳选中的包管理器 |
+| `lastPackageManager` | 上次在设置里确认过的启动命令（pnpm / npm / yarn / bun） |
 | `windowBounds` | 主窗口位置和大小 |
 
 规则：
@@ -104,6 +97,7 @@
 - 端口超范围、远程 URL 不是 http(s)：拒绝写入
 - 设置页保存会与磁盘上已有字段合并，不会冲掉 `lastPackageManager` 和窗口位置
 - 设置页会显示当前来源，以及远程失败等错误文案
+- 设置页「终止服务」会停掉本机正在跑的 `dsh web`（含复用的 3080）；远程实例只断开连接，不会去杀远端进程
 
 ---
 
@@ -149,7 +143,7 @@
 
 ## 9. 安装过程日志
 
-- 外壳页实时显示 `pnpm dlx` 等命令的 stdout / stderr
+- 设置页在手动启动时实时显示 `pnpm dlx` 等命令的 stdout / stderr，完成前不跳走
 - 同一份输出追加到 `userData/web.log`
 - 宿主事件（连接失败、掉线）写到 `userData/shell.log`
 - 日志带 ISO 时间戳
@@ -163,7 +157,7 @@
 ## 10. 远程失败与掉线回退
 
 - 远程模式 URL 不通：提示 **远程实例不可达**，来源保持 `remote`，**不**去 spawn 本机 `dsh`
-- 已连上官方页后，每 **8 秒**再探测一次；不通则回到外壳，文案为「DeepSeek Harness 已停止响应，已回到外壳。」，避免白屏
+- 已连上官方页后，每 **8 秒**再探测一次；不通则回到本机空状态，文案为「DeepSeek Harness 已停止响应。」，避免白屏
 
 ---
 
@@ -171,7 +165,8 @@
 
 - 拖动 / 缩放主窗口后 300ms 写入 `windowBounds`（节流，避免狂写磁盘）
 - 下次启动按上次位置打开；宽高最小 800×600
-- 外壳默认勾选上次用过的包管理器；没有记录则勾列表第一项（通常是 pnpm）
+- 设置页默认勾选上次用过的包管理器；没有记录则勾列表第一项（通常是 pnpm）
+- 重命名 tab 只改 `instances[].name` 并立刻写入 `settings.json`，下次打开还是这个名字；不会因此重新探测或重启 `dsh web`
 
 ---
 
@@ -208,7 +203,7 @@ pnpm test         # tsx --test src/main/*.test.ts && vitest run
 pnpm dev          # Vite 5173 + Electron（不要依赖全局 electron）
 ```
 
-外壳页是 Vite + React（`src/renderer/HostApp.tsx`），用 Testing Library + Vitest 测。截图流程只给人看，不算测试套件。
+宿主页是 Vite + React（`src/renderer/HostApp.tsx`），用 Testing Library + Vitest 测。截图流程只给人看，不算测试套件。
 
 Electron 二进制不走 npm registry，项目 `.npmrc` 已设 `electron_mirror=https://npmmirror.com/mirrors/electron/`。
 

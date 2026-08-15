@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { DEFAULT_LOCAL_PORT } from './runtime.js'
 
 export type PackageManagerId = 'pnpm' | 'npm' | 'yarn' | 'bun'
 
@@ -10,19 +11,31 @@ export type PackageManagerOption = {
   preview: string
 }
 
-const DSH_PACKAGE = '@deepseek-ai/dsh'
+export const DSH_PACKAGE = '@deepseek-ai/dsh'
+
+// pnpm 10+ may ask which install scripts to approve. Desktop spawn has no TTY,
+// so skip that prompt and allow builds for this already-confirmed launch.
+export const PNPM_DLX_PREFIX = [
+  '--config.dangerouslyAllowAllBuilds=true',
+  'dlx',
+  DSH_PACKAGE,
+] as const
 
 const CANDIDATES: Array<{
   id: PackageManagerId
   label: string
   bin: string
-  args: string[]
+  prefix: string[]
 }> = [
-  { id: 'pnpm', label: 'pnpm', bin: 'pnpm', args: ['dlx', DSH_PACKAGE, 'web', '--port', '0'] },
-  { id: 'npm', label: 'npm / npx', bin: 'npx', args: ['-y', DSH_PACKAGE, 'web', '--port', '0'] },
-  { id: 'yarn', label: 'yarn', bin: 'yarn', args: ['dlx', DSH_PACKAGE, 'web', '--port', '0'] },
-  { id: 'bun', label: 'bun', bin: 'bunx', args: [DSH_PACKAGE, 'web', '--port', '0'] },
+  { id: 'pnpm', label: 'pnpm', bin: 'pnpm', prefix: [...PNPM_DLX_PREFIX] },
+  { id: 'npm', label: 'npm / npx', bin: 'npx', prefix: ['-y', DSH_PACKAGE] },
+  { id: 'yarn', label: 'yarn', bin: 'yarn', prefix: ['dlx', DSH_PACKAGE] },
+  { id: 'bun', label: 'bun', bin: 'bunx', prefix: [DSH_PACKAGE] },
 ]
+
+export function harnessWebArgs(prefix: string[] = [], port: number = DEFAULT_LOCAL_PORT): string[] {
+  return [...prefix, 'web', '--port', String(port)]
+}
 
 export function previewFor(commandPath: string, args: string[]): string {
   const commandName = commandPath.split('/').pop() ?? commandPath
@@ -31,6 +44,7 @@ export function previewFor(commandPath: string, args: string[]): string {
 
 export async function detectPackageManagers(
   lookup: (bin: string) => Promise<string | null>,
+  port: number = DEFAULT_LOCAL_PORT,
 ): Promise<PackageManagerOption[]> {
   const found: PackageManagerOption[] = []
 
@@ -40,12 +54,13 @@ export async function detectPackageManagers(
       continue
     }
 
+    const args = harnessWebArgs(candidate.prefix, port)
     found.push({
       id: candidate.id,
       label: candidate.label,
       commandPath,
-      args: [...candidate.args],
-      preview: previewFor(commandPath, candidate.args),
+      args,
+      preview: previewFor(commandPath, args),
     })
   }
 

@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('dshShell', {
   getState: () => ipcRenderer.invoke('shellGetState'),
   detect: () => ipcRenderer.invoke('shellDetect'),
   install: (id) => ipcRenderer.invoke('shellInstall', id),
+  stop: () => ipcRenderer.invoke('shellStop'),
   selectInstance: (id) => ipcRenderer.invoke('shellSelectInstance', id),
   addInstance: (input) => ipcRenderer.invoke('shellAddInstance', input),
   updateInstance: (input) => ipcRenderer.invoke('shellUpdateInstance', input),

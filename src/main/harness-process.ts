@@ -1,6 +1,20 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
 
 const LOOPBACK_URL = /https?:\/\/(?:127\.0\.0\.1|localhost):\d+\/?/i
+const INTERACTIVE_PROMPT = /choose which packages to build|approve(?:-| )builds|\? choose |press (?:enter|space)|use (?:arrow|the arrow) keys/i
+
+export function looksLikeInteractivePrompt(output: string): boolean {
+  return INTERACTIVE_PROMPT.test(output)
+}
+
+export function nonInteractiveEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    CI: '1',
+    npm_config_yes: 'true',
+    ...extra,
+  }
+}
 
 export function parseHarnessWebUrl(output: string): string | null {
   const match = output.match(LOOPBACK_URL)
@@ -36,6 +50,55 @@ function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
       // already gone
     }
   }
+}
+
+function execText(command: string, args: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    execFile(command, args, { timeout: 4000 }, (_error, stdout) => {
+      resolve(stdout ?? '')
+    })
+  })
+}
+
+export async function stopListeningOnPort(
+  port: number,
+  exec: (command: string, args: string[]) => Promise<string> = execText,
+): Promise<number[]> {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return []
+  }
+
+  const stdout = await exec('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'])
+  const pids = stdout
+    .split(/\s+/)
+    .map((item) => Number(item))
+    .filter((pid) => Number.isInteger(pid) && pid > 0)
+
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGTERM')
+    } catch {
+      // already gone
+    }
+  }
+
+  if (pids.length === 0) {
+    return []
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  const still = (await exec('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t']))
+    .split(/\s+/)
+    .map((item) => Number(item))
+    .filter((pid) => Number.isInteger(pid) && pid > 0)
+  for (const pid of still) {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // already gone
+    }
+  }
+  return pids
 }
 
 export async function stopChild(child: ChildProcess): Promise<void> {
@@ -79,7 +142,7 @@ export async function startHarnessWeb(opts: {
   const timeoutMs = opts.timeoutMs ?? 20_000
   const child = spawn(opts.command, opts.args, {
     cwd: opts.cwd,
-    env: opts.env,
+    env: nonInteractiveEnv(opts.env),
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   })
@@ -113,6 +176,14 @@ export async function startHarnessWeb(opts: {
       const text = chunk.toString('utf8')
       output += text
       opts.onOutput?.(text)
+      if (looksLikeInteractivePrompt(output)) {
+        void finishError(
+          new Error(
+            '启动命令在等待交互确认（例如 pnpm 选择需要 build 的包）。桌面端无法回答这个提示，已停止等待。请改用设置里的 npx，或升级 pnpm 后重试。',
+          ),
+        )
+        return
+      }
       const url = parseHarnessWebUrl(output)
       if (!url || settled) {
         return

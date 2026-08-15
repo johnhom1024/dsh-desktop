@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  DEFAULT_LOCAL_INSTANCE_NAME,
   DEFAULT_LOCAL_PORT,
   defaultLocalInstance,
   defaultSettings,
@@ -63,6 +64,15 @@ function remoteInstanceName(url: string): string {
   }
 }
 
+function isLegacyLocalName(name: string, url: string): boolean {
+  try {
+    const port = new URL(url).port || String(DEFAULT_LOCAL_PORT)
+    return name === `本机 ${port}` || name === '本机'
+  } catch {
+    return name === '本机'
+  }
+}
+
 function parseInstance(value: unknown): Instance | null {
   if (!value || typeof value !== 'object') {
     return null
@@ -82,7 +92,10 @@ function parseInstance(value: unknown): Instance | null {
   }
   return {
     id: candidate.id,
-    name: candidate.name,
+    name:
+      candidate.kind === 'local' && isLegacyLocalName(candidate.name, candidate.url)
+        ? DEFAULT_LOCAL_INSTANCE_NAME
+        : candidate.name,
     kind: candidate.kind,
     url: candidate.url,
   }

@@ -1,14 +1,13 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import type { RuntimeSource } from './runtime.js'
+import { DSH_PACKAGE, PNPM_DLX_PREFIX, harnessWebArgs } from './package-managers.js'
+import { DEFAULT_LOCAL_PORT, type RuntimeSource } from './runtime.js'
 
 export type LaunchSpec =
   | { kind: 'url'; url: string }
   | { kind: 'spawn'; command: string; args: string[] }
   | { kind: 'none' }
-
-const DSH_PACKAGE = '@deepseek-ai/dsh'
 
 export function whichOnPath(bin: string): string | null {
   try {
@@ -50,13 +49,14 @@ function nodeExecutable(lookup: (bin: string) => string | null): string | null {
 export function launchSpecFor(
   source: RuntimeSource,
   lookup: (bin: string) => string | null = whichOnPath,
+  port: number = DEFAULT_LOCAL_PORT,
 ): LaunchSpec {
   if (source.kind === 'reuse-local' || source.kind === 'remote') {
     return { kind: 'url', url: source.url }
   }
 
   if (source.kind === 'path-dsh') {
-    return { kind: 'spawn', command: source.command, args: ['web', '--port', '0'] }
+    return { kind: 'spawn', command: source.command, args: harnessWebArgs([], port) }
   }
 
   if (source.kind === 'pnpm-dlx') {
@@ -64,7 +64,7 @@ export function launchSpecFor(
     if (!pnpm) {
       return { kind: 'none' }
     }
-    return { kind: 'spawn', command: pnpm, args: ['dlx', DSH_PACKAGE, 'web', '--port', '0'] }
+    return { kind: 'spawn', command: pnpm, args: harnessWebArgs([...PNPM_DLX_PREFIX], port) }
   }
 
   if (source.kind === 'npx-cache') {
@@ -72,7 +72,7 @@ export function launchSpecFor(
     if (!npx) {
       return { kind: 'none' }
     }
-    return { kind: 'spawn', command: npx, args: ['-y', DSH_PACKAGE, 'web', '--port', '0'] }
+    return { kind: 'spawn', command: npx, args: harnessWebArgs(['-y', DSH_PACKAGE], port) }
   }
 
   if (source.kind === 'bundled') {
@@ -81,7 +81,7 @@ export function launchSpecFor(
     if (!bin || !node) {
       return { kind: 'none' }
     }
-    return { kind: 'spawn', command: node, args: [bin, 'web', '--port', '0'] }
+    return { kind: 'spawn', command: node, args: harnessWebArgs([bin], port) }
   }
 
   return { kind: 'none' }

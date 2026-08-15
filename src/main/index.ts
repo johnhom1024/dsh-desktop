@@ -1,12 +1,11 @@
 import { execFile } from 'node:child_process'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { BrowserWindow, Menu, Tray, WebContentsView, app, ipcMain, nativeTheme, shell, type WebContents } from 'electron'
-import { findNpxCachedDsh, findPnpmDlxCachedDsh, readDshPackage } from './dsh-package.js'
+import { readDshPackage } from './dsh-package.js'
 import { readCliDshVersion } from './dsh-version.js'
-import { startHarnessWeb } from './harness-process.js'
+import { startHarnessWeb, stopListeningOnPort } from './harness-process.js'
 import { appendHostLog, formatTrayStatus } from './host-state.js'
-import { removeInstance, selectInstance, upsertInstance } from './instances.js'
+import { removeInstance, renameInstance, selectInstance, upsertInstance } from './instances.js'
 import { TAB_BAR_HEIGHT, layoutActiveView, shouldShowInstanceView } from './instance-views.js'
 import { launchSpecFor } from './launch.js'
 import {
@@ -23,6 +22,7 @@ import { probeHarnessWeb } from './probe.js'
 import {
   activeInstance,
   localPortFromSettings,
+  localWebUrl,
   resolveRuntime,
   type Instance,
   type RuntimeSource,
@@ -47,6 +47,7 @@ let tray: Tray | null = null
 let currentSource: RuntimeSource = { kind: 'none' }
 let currentUrl: string | null = null
 let lastError: string | null = null
+let starting = false
 let stopHarness: (() => Promise<void>) | null = null
 let quitting = false
 let watchTimer: ReturnType<typeof setInterval> | null = null
@@ -72,18 +73,6 @@ function emitInstallLog(text: string): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('shellInstallLog', text)
   }
-}
-
-function whichDsh(): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile('which', ['dsh'], (error, stdout) => {
-      if (error) {
-        resolve(null)
-        return
-      }
-      resolve(stdout.trim() || null)
-    })
-  })
 }
 
 function bundledPackage(): { packageRoot: string; version: string } | null {
@@ -160,7 +149,7 @@ function refreshTray(): void {
   if (!tray) {
     return
   }
-  setTrayStatus(tray, formatTrayStatus(currentSource, currentUrl))
+  setTrayStatus(tray, starting ? '正在启动…' : formatTrayStatus(currentSource, currentUrl))
 }
 
 function stopWatch(): void {
@@ -192,11 +181,6 @@ async function discoverRuntime(): Promise<RuntimeSource> {
   return resolveRuntime({
     settings: loadSettings(userData()),
     probe: probeHarnessWeb,
-    whichDsh,
-    findPnpmDlx: async () =>
-      findPnpmDlxCachedDsh(join(homedir(), 'Library', 'Caches', 'pnpm', 'dlx')),
-    findNpxCache: async () => findNpxCachedDsh(join(homedir(), '.npm', '_npx')),
-    bundled: bundledPackage(),
   })
 }
 
@@ -409,6 +393,37 @@ async function stopOwnedHarness(): Promise<void> {
   stopHarness = null
 }
 
+async function stopLocalService(): Promise<void> {
+  starting = false
+  stopWatch()
+  lastError = null
+  const settings = loadSettings(userData())
+  const active = activeInstance(settings)
+  if (active?.kind === 'remote') {
+    currentSource = { kind: 'remote', url: active.url }
+    currentUrl = null
+    lastError = '已断开远程连接。'
+    hideInstanceViews()
+    refreshTray()
+    await pushState()
+    return
+  }
+
+  await stopOwnedHarness()
+  const port = localPortFromSettings(settings)
+  const pids = await stopListeningOnPort(port)
+  if (pids.length) {
+    logShell(`stopped local dsh web on ${port} (pid ${pids.join(', ')})`)
+  } else {
+    logShell(`no listener found on ${port}`)
+  }
+  currentSource = { kind: 'none' }
+  currentUrl = null
+  hideInstanceViews()
+  refreshTray()
+  await pushState()
+}
+
 async function applySource(source: RuntimeSource): Promise<string | null> {
   currentSource = source
   if (source.kind === 'remote') {
@@ -421,19 +436,9 @@ async function applySource(source: RuntimeSource): Promise<string | null> {
     return source.url
   }
 
-  const spec = launchSpecFor(source)
+  const spec = launchSpecFor(source, undefined, localPortFromSettings(loadSettings(userData())))
   if (spec.kind === 'url') {
     return spec.url
-  }
-  if (spec.kind === 'spawn') {
-    const started = await startHarnessWeb({
-      command: spec.command,
-      args: spec.args,
-      probe: probeHarnessWeb,
-      onOutput: emitInstallLog,
-    })
-    stopHarness = started.stop
-    return started.url
   }
   return null
 }
@@ -448,6 +453,7 @@ export type ShellState = {
   managers: PackageManagerOption[]
   lastError: string | null
   lastPackageManager: PackageManagerId | null
+  starting: boolean
   settingsOpen: boolean
   openAtLogin: boolean
   appVersion: string
@@ -463,9 +469,10 @@ async function shellState(): Promise<ShellState> {
     localPort: localPortFromSettings(settings),
     instances: settings.instances,
     activeInstanceId: settings.activeInstanceId,
-    managers: await detectPackageManagers(lookupOnPath),
+    managers: await detectPackageManagers(lookupOnPath, localPortFromSettings(settings)),
     lastError,
     lastPackageManager: settings.lastPackageManager ?? null,
+    starting,
     settingsOpen: false,
     openAtLogin: settings.openAtLogin,
     appVersion: app.getVersion(),
@@ -481,6 +488,7 @@ async function pushState(): Promise<void> {
 }
 
 async function connectActive(): Promise<void> {
+  starting = false
   lastError = null
   currentUrl = null
   stopWatch()
@@ -506,6 +514,10 @@ async function connectActive(): Promise<void> {
       await pushState()
       return
     }
+    if (active.kind === 'local' && settings.lastPackageManager) {
+      await installWithManager(settings.lastPackageManager)
+      return
+    }
   } catch (error) {
     lastError = error instanceof Error ? error.message : String(error)
     if (currentSource.kind !== 'remote') {
@@ -519,18 +531,47 @@ async function connectActive(): Promise<void> {
   await pushState()
 }
 
+async function showLocalUrl(url: string): Promise<void> {
+  const settings = loadSettings(userData())
+  const local = settings.instances.find((item) => item.kind === 'local') ?? settings.instances[0]
+  if (!local) {
+    return
+  }
+  persistSettings({ ...settings, activeInstanceId: local.id })
+  showInstanceView(local.id, url)
+}
+
 async function installWithManager(id: PackageManagerId): Promise<ShellState> {
-  const managers = await detectPackageManagers(lookupOnPath)
+  const settings = loadSettings(userData())
+  const port = localPortFromSettings(settings)
+  const managers = await detectPackageManagers(lookupOnPath, port)
   const chosen = managers.find((item) => item.id === id)
   if (!chosen) {
     lastError = '没有找到这个包管理器，请先点检测。'
+    starting = false
     return shellState()
   }
 
-  persistSettings({ ...loadSettings(userData()), lastPackageManager: id })
-  await stopOwnedHarness()
+  persistSettings({ ...settings, lastPackageManager: id })
   lastError = null
+  currentUrl = null
+  hideInstanceViews()
+
+  const reuseUrl = localWebUrl(port)
+  if (await probeHarnessWeb(reuseUrl)) {
+    currentSource = { kind: 'reuse-local', url: reuseUrl }
+    starting = false
+    await showLocalUrl(reuseUrl)
+    refreshTray()
+    await pushState()
+    return shellState()
+  }
+
+  await stopOwnedHarness()
+  starting = true
   emitInstallLog(`$ ${chosen.preview}\n`)
+  refreshTray()
+  await pushState()
 
   try {
     const started = await startHarnessWeb({
@@ -542,14 +583,11 @@ async function installWithManager(id: PackageManagerId): Promise<ShellState> {
     })
     stopHarness = started.stop
     currentSource = { kind: 'reuse-local', url: started.url }
-    const settings = loadSettings(userData())
-    const local = settings.instances.find((item) => item.kind === 'local') ?? settings.instances[0]
-    if (local) {
-      persistSettings({ ...settings, activeInstanceId: local.id })
-      showInstanceView(local.id, started.url)
-    }
+    starting = false
+    await showLocalUrl(started.url)
     refreshTray()
   } catch (error) {
+    starting = false
     currentSource = { kind: 'none' }
     currentUrl = null
     lastError = error instanceof Error ? error.message : String(error)
@@ -558,6 +596,7 @@ async function installWithManager(id: PackageManagerId): Promise<ShellState> {
     refreshTray()
   }
 
+  await pushState()
   return shellState()
 }
 
@@ -726,6 +765,11 @@ function registerIpc(): void {
 
   ipcMain.handle('shellInstall', (_event, id: PackageManagerId) => installWithManager(id))
 
+  ipcMain.handle('shellStop', async () => {
+    await stopLocalService()
+    return shellState()
+  })
+
   ipcMain.handle('shellOpenSettings', () => {
     openSettings()
   })
@@ -795,22 +839,13 @@ function registerIpc(): void {
   ipcMain.handle(
     'shellUpdateInstance',
     async (_event, input: { id: string; name: string; url: string }) => {
-      const current = loadSettings(userData()).instances.find((item) => item.id === input.id)
-      if (!current) {
-        return shellState()
-      }
-      const next = upsertInstance(loadSettings(userData()), {
-        id: input.id,
-        name: input.name,
-        kind: current.kind,
-        url: input.url,
-      })
+      const next = renameInstance(loadSettings(userData()), input.id, input.name)
       if (!next) {
-        lastError = '远程 URL 必须是 http 或 https'
+        lastError = '名称不能为空'
         return shellState()
       }
       persistSettings(next)
-      await connectActive()
+      await pushState()
       return shellState()
     },
   )

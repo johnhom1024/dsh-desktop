@@ -20,10 +20,17 @@ test('detectPackageManagers returns pnpm first when several managers exist', asy
     found.map((item) => item.id),
     ['pnpm', 'npm', 'yarn', 'bun'],
   )
-  equal(found[0]?.preview, 'pnpm dlx @deepseek-ai/dsh web --port 0')
-  equal(found[1]?.preview, 'npx -y @deepseek-ai/dsh web --port 0')
+  equal(found[0]?.preview, 'pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --port 3080')
+  equal(found[1]?.preview, 'npx -y @deepseek-ai/dsh web --port 3080')
   equal(found[0]?.commandPath, '/Users/me/Library/pnpm/pnpm')
-  deepEqual(found[0]?.args, ['dlx', '@deepseek-ai/dsh', 'web', '--port', '0'])
+  deepEqual(found[0]?.args, [
+    '--config.dangerouslyAllowAllBuilds=true',
+    'dlx',
+    '@deepseek-ai/dsh',
+    'web',
+    '--port',
+    '3080',
+  ])
 })
 
 test('detectPackageManagers maps npm to npx -y', async () => {
@@ -31,16 +38,29 @@ test('detectPackageManagers maps npm to npx -y', async () => {
   equal(found.length, 1)
   equal(found[0]?.id, 'npm')
   equal(found[0]?.commandPath, '/usr/bin/npx')
-  deepEqual(found[0]?.args, ['-y', '@deepseek-ai/dsh', 'web', '--port', '0'])
+  deepEqual(found[0]?.args, ['-y', '@deepseek-ai/dsh', 'web', '--port', '3080'])
 })
 
 test('detectPackageManagers ignores managers that are not on PATH', async () => {
   const found = await detectPackageManagers(lookupFrom({ yarn: '/opt/homebrew/bin/yarn' }))
   const ids: PackageManagerId[] = found.map((item) => item.id)
   deepEqual(ids, ['yarn'])
-  equal(found[0]?.preview, 'yarn dlx @deepseek-ai/dsh web --port 0')
+  equal(found[0]?.preview, 'yarn dlx @deepseek-ai/dsh web --port 3080')
 })
 
 test('detectPackageManagers returns an empty list when nothing is installed', async () => {
   deepEqual(await detectPackageManagers(lookupFrom({})), [])
+})
+
+test('detectPackageManagers uses the saved local port instead of 0', async () => {
+  const found = await detectPackageManagers(lookupFrom({ pnpm: '/opt/homebrew/bin/pnpm' }), 18080)
+  equal(found[0]?.preview, 'pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --port 18080')
+  deepEqual(found[0]?.args, [
+    '--config.dangerouslyAllowAllBuilds=true',
+    'dlx',
+    '@deepseek-ai/dsh',
+    'web',
+    '--port',
+    '18080',
+  ])
 })

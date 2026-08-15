@@ -4,7 +4,12 @@ import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { parseHarnessWebUrl, startHarnessWeb } from './harness-process.js'
+import {
+  looksLikeInteractivePrompt,
+  parseHarnessWebUrl,
+  startHarnessWeb,
+  stopListeningOnPort,
+} from './harness-process.js'
 
 test('parseHarnessWebUrl reads the first loopback http url', () => {
   equal(
@@ -15,6 +20,12 @@ test('parseHarnessWebUrl reads the first loopback http url', () => {
 
 test('parseHarnessWebUrl ignores non-loopback urls', () => {
   equal(parseHarnessWebUrl('open http://example.com:3080'), null)
+})
+
+test('looksLikeInteractivePrompt detects pnpm build approval prompts', () => {
+  equal(looksLikeInteractivePrompt('Choose which packages to build\n> esbuild'), true)
+  equal(looksLikeInteractivePrompt('? Choose the packages to approve builds'), true)
+  equal(looksLikeInteractivePrompt('listening on http://127.0.0.1:3080/'), false)
 })
 
 test('startHarnessWeb waits until the printed url is ready', async () => {
@@ -150,4 +161,37 @@ console.error('downloading tarball')
 
   match(chunks.join(''), /preparing package/)
   match(chunks.join(''), /downloading tarball/)
+})
+
+test('stopListeningOnPort signals pids listening on the given port', async () => {
+  const calls: string[] = []
+  const pids = await stopListeningOnPort(3080, async (command, args) => {
+    calls.push([command, ...args].join(' '))
+    return calls.length === 1 ? '4242\n' : ''
+  })
+  deepEqual(pids, [4242])
+  equal(calls[0], 'lsof -nP -iTCP:3080 -sTCP:LISTEN -t')
+})
+
+test('startHarnessWeb fails fast when the child asks for interactive input', async () => {
+  const script = join(tmpdir(), `fake-dsh-prompt-${Date.now()}.mjs`)
+  await writeFile(
+    script,
+    `
+console.log('Choose which packages to build')
+setInterval(() => {}, 1000)
+`,
+    'utf8',
+  )
+
+  await rejects(
+    () =>
+      startHarnessWeb({
+        command: process.execPath,
+        args: [script],
+        probe: async () => false,
+        timeoutMs: 5000,
+      }),
+    /等待交互确认/,
+  )
 })

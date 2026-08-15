@@ -13,6 +13,7 @@ export type ShellState = {
   managers: PackageManagerOption[]
   lastError: string | null
   lastPackageManager: string | null
+  starting: boolean
   settingsOpen: boolean
   openAtLogin: boolean
   appVersion: string
@@ -24,6 +25,7 @@ contextBridge.exposeInMainWorld('dshShell', {
   detect: (): Promise<ShellState> => ipcRenderer.invoke('shellDetect'),
   install: (id: PackageManagerOption['id']): Promise<ShellState> =>
     ipcRenderer.invoke('shellInstall', id),
+  stop: (): Promise<ShellState> => ipcRenderer.invoke('shellStop'),
   selectInstance: (id: string): Promise<ShellState> => ipcRenderer.invoke('shellSelectInstance', id),
   addInstance: (input: { name: string; kind: 'local' | 'remote'; url: string }): Promise<ShellState> =>
     ipcRenderer.invoke('shellAddInstance', input),

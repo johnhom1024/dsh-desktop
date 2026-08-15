@@ -14,6 +14,7 @@ export type ShellState = {
   managers: PackageManagerOption[]
   lastError: string | null
   lastPackageManager: string | null
+  starting: boolean
   settingsOpen: boolean
   openAtLogin: boolean
   appVersion: string
@@ -24,6 +25,7 @@ export type DshShellApi = {
   getState: () => Promise<ShellState>
   detect: () => Promise<ShellState>
   install: (id: PackageManagerId) => Promise<ShellState>
+  stop?: () => Promise<ShellState>
   selectInstance: (id: string) => Promise<ShellState>
   addInstance: (input: { name: string; kind: 'local' | 'remote'; url: string }) => Promise<ShellState>
   updateInstance: (input: { id: string; name: string; url: string }) => Promise<ShellState>

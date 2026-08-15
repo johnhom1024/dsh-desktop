@@ -7,7 +7,7 @@ import { loadSettings, saveSettings } from './settings.js'
 
 const LOCAL_3080 = {
   id: 'local-3080',
-  name: '本机 3080',
+  name: 'deepseek-harness',
   kind: 'local' as const,
   url: 'http://127.0.0.1:3080',
 }
@@ -37,7 +37,7 @@ test('loadSettings migrates localPort into a local instance', async () => {
   equal(loaded.instances[0]?.kind, 'local')
   equal(loaded.instances[0]?.url, 'http://127.0.0.1:18080')
   equal(loaded.instances[0]?.id, 'local-18080')
-  equal(loaded.instances[0]?.name, '本机 18080')
+  equal(loaded.instances[0]?.name, 'deepseek-harness')
   equal(loaded.activeInstanceId, loaded.instances[0]?.id)
 })
 
@@ -206,6 +206,52 @@ test('saveSettings then loadSettings round-trips lastPackageManager and window b
     lastPackageManager: 'pnpm',
     windowBounds: { x: 40, y: 60, width: 1400, height: 900 },
   })
+})
+
+test('saveSettings then loadSettings keeps a renamed local tab', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+
+  equal(
+    saveSettings(dir, {
+      instances: [{ ...LOCAL_3080, name: '工作区' }],
+      activeInstanceId: 'local-3080',
+      openAtLogin: false,
+    }),
+    true,
+  )
+  equal(loadSettings(dir).instances[0]?.name, '工作区')
+})
+
+test('loadSettings remaps the legacy 本机 tab name to deepseek-harness', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+  const { writeFile } = await import('node:fs/promises')
+  await writeFile(
+    join(dir, 'settings.json'),
+    JSON.stringify({
+      instances: [{ id: 'local-3080', name: '本机 3080', kind: 'local', url: 'http://127.0.0.1:3080' }],
+      activeInstanceId: 'local-3080',
+      openAtLogin: false,
+    }),
+    'utf8',
+  )
+
+  equal(loadSettings(dir).instances[0]?.name, 'deepseek-harness')
+})
+
+test('loadSettings keeps a custom local tab name', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+  const { writeFile } = await import('node:fs/promises')
+  await writeFile(
+    join(dir, 'settings.json'),
+    JSON.stringify({
+      instances: [{ ...LOCAL_3080, name: '工作区' }],
+      activeInstanceId: 'local-3080',
+      openAtLogin: false,
+    }),
+    'utf8',
+  )
+
+  equal(loadSettings(dir).instances[0]?.name, '工作区')
 })
 
 test('saveSettings refuses an empty instance list', async () => {

@@ -44,10 +44,12 @@ export function localWebUrl(port: number = DEFAULT_LOCAL_PORT): string {
   return `http://127.0.0.1:${port}`
 }
 
+export const DEFAULT_LOCAL_INSTANCE_NAME = 'deepseek-harness'
+
 export function defaultLocalInstance(port: number = DEFAULT_LOCAL_PORT): Instance {
   return {
     id: `local-${port}`,
-    name: `本机 ${port}`,
+    name: DEFAULT_LOCAL_INSTANCE_NAME,
     kind: 'local',
     url: localWebUrl(port),
   }
@@ -82,10 +84,6 @@ export function localPortFromSettings(settings: Settings): number {
 export async function resolveRuntime(input: {
   settings: Settings
   probe: (url: string) => Promise<boolean>
-  whichDsh: () => Promise<string | null>
-  findPnpmDlx: () => Promise<DshPackage | null>
-  findNpxCache: () => Promise<DshPackage | null>
-  bundled: DshPackage | null
 }): Promise<RuntimeSource> {
   const active = activeInstance(input.settings)
   if (active?.kind === 'remote') {
@@ -95,25 +93,6 @@ export async function resolveRuntime(input: {
   const reuseUrl = active?.kind === 'local' ? active.url : localWebUrl(localPortFromSettings(input.settings))
   if (await input.probe(reuseUrl)) {
     return { kind: 'reuse-local', url: reuseUrl }
-  }
-
-  const command = await input.whichDsh()
-  if (command) {
-    return { kind: 'path-dsh', command }
-  }
-
-  const pnpmDlx = await input.findPnpmDlx()
-  if (pnpmDlx) {
-    return { kind: 'pnpm-dlx', ...pnpmDlx }
-  }
-
-  const cached = await input.findNpxCache()
-  if (cached) {
-    return { kind: 'npx-cache', ...cached }
-  }
-
-  if (input.bundled) {
-    return { kind: 'bundled', ...input.bundled }
   }
 
   return { kind: 'none' }

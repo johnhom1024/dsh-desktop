@@ -1,4 +1,10 @@
-import { defaultLocalInstance, type Instance, type InstanceKind, type Settings } from './runtime.js'
+import {
+  DEFAULT_LOCAL_INSTANCE_NAME,
+  defaultLocalInstance,
+  type Instance,
+  type InstanceKind,
+  type Settings,
+} from './runtime.js'
 
 function isHttpUrl(value: string): boolean {
   try {
@@ -23,12 +29,7 @@ function isLocalUrl(value: string): boolean {
 
 export function instanceLabel(instance: Pick<Instance, 'kind' | 'url'> & { name?: string }): string {
   if (instance.kind === 'local') {
-    try {
-      const port = new URL(instance.url).port || '80'
-      return `本机 ${port}`
-    } catch {
-      return instance.name || '本机'
-    }
+    return instance.name?.trim() || DEFAULT_LOCAL_INSTANCE_NAME
   }
   try {
     const parsed = new URL(instance.url)
@@ -54,6 +55,23 @@ export function selectInstance(settings: Settings, id: string): Settings | null 
     return null
   }
   return { ...settings, activeInstanceId: id }
+}
+
+export function renameInstance(settings: Settings, id: string, name: string): Settings | null {
+  const trimmed = name.trim()
+  if (!trimmed) {
+    return null
+  }
+  const index = settings.instances.findIndex((item) => item.id === id)
+  if (index === -1) {
+    return null
+  }
+  const current = settings.instances[index]!
+  if (current.name === trimmed) {
+    return settings
+  }
+  const instances = settings.instances.map((item, i) => (i === index ? { ...item, name: trimmed } : item))
+  return { ...settings, instances }
 }
 
 export function upsertInstance(

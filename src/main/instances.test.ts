@@ -1,7 +1,7 @@
 import { deepEqual, equal } from 'node:assert/strict'
 import { test } from 'node:test'
 import { defaultLocalInstance, type Settings } from './runtime.js'
-import { instanceLabel, removeInstance, selectInstance, upsertInstance } from './instances.js'
+import { instanceLabel, removeInstance, renameInstance, selectInstance, upsertInstance } from './instances.js'
 
 function base(): Settings {
   const local = defaultLocalInstance()
@@ -61,6 +61,17 @@ test('removeInstance moves activeId when the active tab is removed', () => {
   equal(next?.activeInstanceId, local.id)
 })
 
+test('renameInstance updates only the tab name', () => {
+  const next = renameInstance(base(), 'local-3080', '  工作区  ')
+  equal(next?.instances[0]?.name, '工作区')
+  equal(next?.instances[0]?.url, 'http://127.0.0.1:3080')
+  equal(next?.activeInstanceId, 'local-3080')
+})
+
+test('renameInstance rejects a blank name', () => {
+  equal(renameInstance(base(), 'local-3080', '   '), null)
+})
+
 test('upsertInstance can rename a local instance without changing its url', () => {
   const next = upsertInstance(base(), {
     id: 'local-3080',
@@ -73,8 +84,8 @@ test('upsertInstance can rename a local instance without changing its url', () =
   equal(next?.instances.length, 1)
 })
 
-test('instanceLabel uses host:port for remotes and 本机 for local', () => {
-  equal(instanceLabel(defaultLocalInstance()), '本机 3080')
+test('instanceLabel uses host:port for remotes and deepseek-harness for local', () => {
+  equal(instanceLabel(defaultLocalInstance()), 'deepseek-harness')
   equal(
     instanceLabel({
       kind: 'remote',

@@ -1,5 +1,5 @@
-import { Monitor, Moon, Settings, Sun } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { LoaderCircle, Monitor, Moon, Settings, Sun } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -101,6 +101,8 @@ export function HostApp({ api }: HostAppProps) {
   const [statusError, setStatusError] = useState(false)
   const [log, setLog] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsOpenRef = useRef(false)
+  const stayInSettingsWhileStartingRef = useRef(false)
   const [updateReport, setUpdateReport] = useState<UpdateReport | null>(null)
   const [checkingApp, setCheckingApp] = useState(false)
   const [checkingDsh, setCheckingDsh] = useState(false)
@@ -110,11 +112,16 @@ export function HostApp({ api }: HostAppProps) {
   const [renameError, setRenameError] = useState('')
 
   function openSettingsPage() {
+    settingsOpenRef.current = true
     setSettingsOpen(true)
     void api.openSettings()
   }
 
   function closeSettingsPage() {
+    if (!settingsOpenRef.current) {
+      return
+    }
+    settingsOpenRef.current = false
     setSettingsOpen(false)
     void api.closeSettings()
   }
@@ -164,24 +171,46 @@ export function HostApp({ api }: HostAppProps) {
   function applyState(next: ShellState) {
     setState(next)
     setSelectedId((current) => pickManager(next, current))
-    if (next.settingsOpen) {
-      setSettingsOpen(true)
-    }
-    if (next.detected && next.url) {
-      setStatus('已检测到 Web 页面，正在打开…')
+    if (next.starting) {
+      if (!stayInSettingsWhileStartingRef.current) {
+        closeSettingsPage()
+      }
+      setStatus('正在启动 DeepSeek Harness，日志会实时显示在下方。')
       setStatusError(false)
       return
+    }
+    if (stayInSettingsWhileStartingRef.current) {
+      stayInSettingsWhileStartingRef.current = false
+      if (next.detected && next.url && !next.lastError) {
+        closeSettingsPage()
+      }
+    }
+    if (next.settingsOpen) {
+      settingsOpenRef.current = true
+      setSettingsOpen(true)
     }
     if (next.lastError) {
       setStatus(next.lastError)
       setStatusError(true)
-    } else if (next.managers.length) {
-      setStatus('选择一个命令后点确认。不会在你点之前执行任何安装。')
-      setStatusError(false)
-    } else {
-      setStatus('未找到可用的包管理器。')
-      setStatusError(true)
+      return
     }
+    if (next.detected && next.url) {
+      setStatus('服务已在运行。更换启动命令后点保存，下次会用新命令拉起。')
+      setStatusError(false)
+      return
+    }
+    if (next.lastPackageManager) {
+      setStatus('当前没有运行中的服务。可在设置里重新启动。')
+      setStatusError(false)
+      return
+    }
+    if (next.managers.length) {
+      setStatus('请先选择启动命令并确认。确认前不会执行任何安装。')
+      setStatusError(false)
+      return
+    }
+    setStatus('未找到可用的包管理器。')
+    setStatusError(true)
   }
 
   async function run(label: string, fn: () => Promise<ShellState>) {
@@ -209,12 +238,16 @@ export function HostApp({ api }: HostAppProps) {
       applyState(next)
     })
     const stopOpen = api.onOpenSettings(() => {
+      settingsOpenRef.current = true
       setSettingsOpen(true)
     })
     const stopUpdates = api.onUpdatesResult((report) => {
       setUpdateReport(report)
     })
-    void run('正在检测本机环境…', () => api.getState())
+    void api.getState().then(applyState).catch((error) => {
+      setStatus(error instanceof Error ? error.message : String(error))
+      setStatusError(true)
+    })
     return () => {
       stopLog()
       stopState()
@@ -256,12 +289,15 @@ export function HostApp({ api }: HostAppProps) {
     }
   }
 
-  const installDisabled = busy || !selectedId
+  const installDisabled = busy || Boolean(state?.starting) || !selectedId
   const port = state?.localPort || 3080
   const instances = visibleInstances(state)
   const instance = instances[0] ?? null
-  const showSetup = !settingsOpen && !state?.detected
+  const starting = Boolean(state?.starting)
   const connected = Boolean(state?.detected && state.url)
+  const showBoot = !settingsOpen && !state
+  const showIdle = !settingsOpen && Boolean(state) && !connected && !starting
+  const showStarting = !settingsOpen && starting
 
   if (!state && statusError && status.includes('宿主接口')) {
     return <p className="p-6 text-sm text-destructive">{status}</p>
@@ -389,7 +425,7 @@ export function HostApp({ api }: HostAppProps) {
                 </div>
                 <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
                   <span className="text-sm text-muted-foreground">名称</span>
-                  <span className="text-sm">{instance?.name ?? '本机'}</span>
+                  <span className="text-sm">{instance?.name ?? 'deepseek-harness'}</span>
                 </div>
                 <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
                   <span className="text-sm text-muted-foreground">地址</span>
@@ -400,7 +436,7 @@ export function HostApp({ api }: HostAppProps) {
                   <span className="text-sm">{sourceLabel(state?.sourceKind ?? 'none')}</span>
                 </div>
                 <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                  <span className="text-sm text-muted-foreground">启动工具</span>
+                  <span className="text-sm text-muted-foreground">已保存的启动命令</span>
                   <span className="text-sm">{managerLabel(state?.lastPackageManager)}</span>
                 </div>
                 <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
@@ -416,18 +452,115 @@ export function HostApp({ api }: HostAppProps) {
                   </div>
                 ) : null}
               </div>
-              <div className="flex justify-end border-t px-5 py-3">
+              <div className="flex justify-end gap-2 border-t px-5 py-3">
+                <Button
+                  id="stop-service"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || (!connected && !starting) || typeof api.stop !== 'function'}
+                  onClick={() => {
+                    if (typeof api.stop !== 'function') {
+                      setStatus('当前运行的是旧预加载脚本，请完全退出后重新执行 pnpm dev。')
+                      setStatusError(true)
+                      return
+                    }
+                    void run('正在终止本机 DeepSeek Harness…', () => api.stop!())
+                  }}
+                >
+                  终止服务
+                </Button>
                 <Button
                   id="reconnect"
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={busy}
+                  disabled={busy || starting}
                   onClick={() => {
                     void run('正在重新连接…', () => api.detect())
                   }}
                 >
                   重新连接
+                </Button>
+              </div>
+            </section>
+
+            <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
+              <div className="border-b px-5 py-4">
+                <h2 className="text-sm font-medium">启动 DeepSeek Harness</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  首次使用请选择本机已有的包管理器。确认后会写入配置，以后启动应用会默认用这条命令拉起{' '}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">127.0.0.1:{port}</code>
+                  。
+                </p>
+              </div>
+              <div className="space-y-4 px-5 py-4">
+                {!state || state.managers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    没有在 PATH 里找到 pnpm、npx、yarn 或 bunx。请先安装其中一个。
+                  </p>
+                ) : (
+                  <RadioGroup
+                    value={selectedId ?? undefined}
+                    onValueChange={(value) => {
+                      if (isPackageManagerId(value)) {
+                        setSelectedId(value)
+                      }
+                    }}
+                    className="grid gap-2.5"
+                  >
+                    {state.managers.map((item) => (
+                      <Label
+                        key={item.id}
+                        htmlFor={`manager-${item.id}`}
+                        className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                      >
+                        <RadioGroupItem id={`manager-${item.id}`} value={item.id} aria-label={item.label} className="mt-0.5" />
+                        <span className="min-w-0">
+                          <span className="block font-medium text-foreground">{item.label}</span>
+                          <span className="block text-xs font-normal text-muted-foreground">{item.preview}</span>
+                        </span>
+                      </Label>
+                    ))}
+                  </RadioGroup>
+                )}
+                <p id="status" className={cn('min-h-6 text-sm', statusError ? 'error text-destructive' : 'text-muted-foreground')}>
+                  {status}
+                </p>
+                {log ? (
+                  <pre id="log" className="max-h-52 overflow-auto whitespace-pre-wrap rounded-lg border bg-muted p-3 font-mono text-xs">
+                    {log}
+                  </pre>
+                ) : null}
+              </div>
+              <div className="flex justify-end gap-2 border-t px-5 py-3">
+                <Button
+                  id="detect"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || starting}
+                  onClick={() => {
+                    void run('正在重新检测…', () => api.detect())
+                  }}
+                >
+                  重新检测
+                </Button>
+                <Button
+                  id="install"
+                  type="button"
+                  size="sm"
+                  disabled={installDisabled}
+                  onClick={() => {
+                    if (!selectedId) {
+                      return
+                    }
+                    stayInSettingsWhileStartingRef.current = true
+                    setLog('')
+                    void run('正在执行命令，启动日志会显示在下方…', () => api.install(selectedId))
+                  }}
+                >
+                  {starting ? '启动中…' : state?.lastPackageManager ? '保存并启动' : '确认并启动'}
                 </Button>
               </div>
             </section>
@@ -529,75 +662,43 @@ export function HostApp({ api }: HostAppProps) {
         </main>
       ) : null}
 
-      {showSetup ? (
-        <main id="setup" className="mx-auto w-full max-w-3xl flex-1 px-6 py-12">
-          <Card>
+      {showBoot ? (
+        <main id="boot" className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+          <LoaderCircle className="size-8 animate-spin text-primary" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground">{status}</p>
+        </main>
+      ) : null}
+
+      {showStarting ? (
+        <main id="starting" className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+          <LoaderCircle className="size-8 animate-spin text-primary" aria-hidden="true" />
+          <div className="space-y-1 text-center">
+            <p className="text-sm font-medium">正在启动 DeepSeek Harness</p>
+            <p className="text-sm text-muted-foreground">等待 127.0.0.1:{port} 就绪后会自动打开官方页面。</p>
+          </div>
+        </main>
+      ) : null}
+
+      {showIdle ? (
+        <main id="setup" className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center px-6">
+          <Card className="w-full">
             <CardHeader>
-              <CardTitle className="text-xl">当前没有检测到 DeepSeek Harness</CardTitle>
+              <CardTitle className="text-xl">当前没有启动服务</CardTitle>
               <CardDescription>
                 本机 <code id="localHint" className="rounded bg-muted px-1 py-0.5 font-mono text-xs">127.0.0.1:{port}</code>{' '}
-                现在不是官方 Web 页面。选择一个本机已有的包管理器，确认后会执行对应命令安装并启动；端口就绪后自动打开页面。
+                现在不是官方 Web 页面。首次使用请先去设置里选择启动命令并确认。
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div id="options">
-                {!state || state.managers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    没有在 PATH 里找到 pnpm、npx、yarn 或 bunx。请先安装其中一个。
-                  </p>
-                ) : (
-                  <RadioGroup
-                    value={selectedId ?? undefined}
-                    onValueChange={(value) => {
-                      if (isPackageManagerId(value)) {
-                        setSelectedId(value)
-                      }
-                    }}
-                    className="grid gap-2.5"
-                  >
-                    {state.managers.map((item) => (
-                      <Label
-                        key={item.id}
-                        htmlFor={`manager-${item.id}`}
-                        className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
-                      >
-                        <RadioGroupItem id={`manager-${item.id}`} value={item.id} aria-label={item.label} className="mt-0.5" />
-                        <span className="min-w-0">
-                          <span className="block font-medium text-foreground">{item.label}</span>
-                          <span className="block text-xs font-normal text-muted-foreground">{item.preview}</span>
-                        </span>
-                      </Label>
-                    ))}
-                  </RadioGroup>
-                )}
-              </div>
-              <p id="status" className={cn('min-h-6 text-sm', statusError ? 'error text-destructive' : 'text-muted-foreground')}>
-                {status}
-              </p>
-              {log ? (
-                <pre id="log" className="max-h-52 overflow-auto whitespace-pre-wrap rounded-lg border bg-muted p-3 font-mono text-xs">
-                  {log}
-                </pre>
-              ) : null}
+            <CardContent>
+              <p className={cn('text-sm', statusError ? 'error text-destructive' : 'text-muted-foreground')}>{status}</p>
             </CardContent>
-            <CardFooter className="gap-2">
-              <Button id="detect" type="button" variant="outline" disabled={busy} onClick={() => {
-                void run('正在重新检测…', () => api.detect())
-              }}>
-                检测
-              </Button>
+            <CardFooter>
               <Button
-                id="install"
+                id="open-settings-from-idle"
                 type="button"
-                disabled={installDisabled}
-                onClick={() => {
-                  if (!selectedId) {
-                    return
-                  }
-                  void run('正在执行命令并等待端口就绪…', () => api.install(selectedId))
-                }}
+                onClick={openSettingsPage}
               >
-                确认并启动
+                前往设置
               </Button>
             </CardFooter>
           </Card>
