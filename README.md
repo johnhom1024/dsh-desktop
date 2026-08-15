@@ -4,6 +4,8 @@ Thin Electron host for [DeepSeek Harness](https://github.com/deepseek-ai/deepsee
 
 This repo does **not** fork the official project. The desktop app only starts or connects to `dsh web` and keeps the official Web UI in a window.
 
+已实现功能的完整说明见 [docs/features.md](docs/features.md)。
+
 ## Runtime order
 
 1. Reuse `http://127.0.0.1:<port>` if it is already the official UI (default port `3080`, changeable in Settings)
