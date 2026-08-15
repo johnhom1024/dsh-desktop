@@ -44,6 +44,8 @@
 
 ## 3. 首次外壳
 
+主窗口永远保留 44px 宿主顶栏。当前先做单实例：左边「设置」tab，右边本机实例 tab。官方 Web 用 `WebContentsView` 贴在顶栏下面。凡是会画出顶栏的宿主 UI（设置页、重命名弹窗、宿主 DevTools 检查）必须先摘掉官方视图；tab 三点菜单用系统原生 `Menu.popup`，不要用 HTML 下拉。详见 [host-overlays.md](host-overlays.md)。多实例（远程 tab / 加号）先关掉，以后再加。
+
 没检测到官方 Web 时，主窗口停在宿主外壳（不是白屏、也不是静默失败）。
 
 外壳提供：
@@ -74,8 +76,10 @@
 - **单实例**：全机只跑一份。再点图标不会再开一个 Electron / 托盘 / `dsh web`，只把已有窗口拉到前台（最小化会先还原）
 - 应用菜单（连上官方页之后也在）：
   - **设置…** `Cmd+,`
-  - **重新检测** `Cmd+R`
+  - **重新检测** `Cmd+R`（开发模式下 `Cmd+R` 重载宿主页，`Shift+Cmd+R` 才是重新检测）
+  - **开发者工具** `Cmd+Option+I` / `Cmd+Option+J` / `F12`（Windows/Linux 为 `Ctrl+Shift+I` / `Ctrl+Shift+J`）
   - **检测更新…**
+- 官方 `WebContentsView` 获得焦点时，快捷键仍由主进程拦截，不会变成只刷新内部网页。开发者工具打开的是**当前焦点页**：点在官方 UI 上就查官方页，点在顶栏就查宿主。检查宿主元素时会暂时摘掉官方视图，否则原生层会盖住高亮。
 - 托盘菜单：显示窗口、重新检测、连接设置、检测更新、退出
 - 托盘状态：未连接显示 `dsh`；已连接显示 `dsh ✓`，tooltip 写来源和端口（例如 `已连接 · 本机 3080` / `已连接 · 远程 192.168.31.229:3080`）
 
@@ -200,11 +204,11 @@ pnpm dist:mac
 ```bash
 pnpm install
 pnpm typecheck    # tsc --noEmit
-pnpm test         # tsx --test src/main/*.test.ts src/renderer/*.test.ts
-pnpm dev          # pnpm exec electron .（不要依赖全局 electron）
+pnpm test         # tsx --test src/main/*.test.ts && vitest run
+pnpm dev          # Vite 5173 + Electron（不要依赖全局 electron）
 ```
 
-外壳和设置页用 `src/renderer/page-harness.ts` 的假 DOM + 假 preload API 做单测（`shell.test.ts`、`settings.test.ts`），不启动 Electron。截图流程只给人看，不算测试套件。
+外壳页是 Vite + React（`src/renderer/HostApp.tsx`），用 Testing Library + Vitest 测。截图流程只给人看，不算测试套件。
 
 Electron 二进制不走 npm registry，项目 `.npmrc` 已设 `electron_mirror=https://npmmirror.com/mirrors/electron/`。
 
@@ -237,4 +241,4 @@ Electron 二进制不走 npm registry，项目 `.npmrc` 已设 `electron_mirror=
 | 单实例 | `src/main/single-instance.ts` |
 | 版本比较 | `src/main/updates.ts` |
 | 托盘文案 / 窗口几何 / 日志 | `src/main/host-state.ts` |
-| 窗口 / 外壳页 | `src/main/window.ts`、`src/renderer/shell.html`、`src/renderer/settings.html` |
+| 窗口 / 宿主页 | `src/main/window.ts`、`src/renderer/HostApp.tsx`、`src/renderer/index.html` |

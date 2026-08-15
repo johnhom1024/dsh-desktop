@@ -2,22 +2,25 @@
 
 Thin Electron host for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-This repo does **not** fork the official project. The desktop app only starts or connects to `dsh web` and keeps the official Web UI in a window.
+This repo does **not** fork the official project. The desktop app only starts or connects to `dsh web` and keeps the official Web UI under a host tab bar.
 
 已实现功能的完整说明见 [docs/features.md](docs/features.md)。
 
 ## Runtime order
 
-1. Reuse `http://127.0.0.1:<port>` if it is already the official UI (default port `3080`, changeable in Settings)
+The **local** tab still discovers a runtime in this order:
+
+1. Reuse `http://127.0.0.1:<port>` if it is already the official UI (default port `3080`)
 2. `dsh` on `PATH`
 3. Cached `@deepseek-ai/dsh` from `pnpm dlx` (`~/Library/Caches/pnpm/dlx`)
 4. Cached `@deepseek-ai/dsh` from npx
 5. Bundled `@deepseek-ai/dsh` (later)
-6. Saved remote instance, if connection mode is remote
 
-If no official Web UI is found, the app stays on a host shell with **检测** and **设置**. The shell lists package managers already on `PATH` (`pnpm` first, then `npx`, `yarn`, `bunx`) and only runs an install/start command after you confirm. When the printed loopback port becomes ready, the official page opens.
+Remote tabs only probe their saved `http(s)` URL. A down remote never falls back to spawning local `dsh`.
 
-Closing the window hides the app to the menu-bar tray. Quit from the tray. A process started by this app is stopped as a process group on quit (including grandchildren from `pnpm dlx` / `npx`). A reused local instance is left running. A second launch focuses the existing window instead of starting another process.
+The host chrome is a Vite + React page styled with Tailwind CSS v4 and shadcn/ui. The tab bar currently has one local instance plus a Settings tab. Official UI is a `WebContentsView` below the 44px tab bar, so host HTML cannot cover it with `z-index`. Full-page host UI must hide that view; menus that drop below the tab bar must use a native Electron menu. See [docs/host-overlays.md](docs/host-overlays.md). Multi-instance tabs are deferred. `pnpm dev` starts Vite on `127.0.0.1:5173` then Electron.
+
+In development, `Cmd+R` reloads the **host** page (not the official DSH view). `Shift+Cmd+R` still reconnects. `Cmd+Option+I` / `F12` toggles DevTools for the focused page (host chrome or the official view). Renderer CSS/React edits hot-reload through Vite; adding a new dependency or changing `src/main` needs a restart of `pnpm dev`.
 
 Packaged launches from Finder often miss Homebrew / pnpm. The host prepends `/opt/homebrew/bin`, `/usr/local/bin`, and the user's pnpm homes, and also reads `export PATH=` lines from `~/.zprofile` / `~/.zshrc` without executing those files.
 
