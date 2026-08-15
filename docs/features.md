@@ -200,9 +200,11 @@ pnpm dist:mac
 ```bash
 pnpm install
 pnpm typecheck    # tsc --noEmit
-pnpm test         # tsx --test src/main/*.test.ts
+pnpm test         # tsx --test src/main/*.test.ts src/renderer/*.test.ts
 pnpm dev          # pnpm exec electron .（不要依赖全局 electron）
 ```
+
+外壳和设置页用 `src/renderer/page-harness.ts` 的假 DOM + 假 preload API 做单测（`shell.test.ts`、`settings.test.ts`），不启动 Electron。截图流程只给人看，不算测试套件。
 
 Electron 二进制不走 npm registry，项目 `.npmrc` 已设 `electron_mirror=https://npmmirror.com/mirrors/electron/`。
 
