@@ -36,7 +36,7 @@ import {
   fetchNpmLatestVersion,
   type UpdateReport,
 } from './updates.js'
-import { attachWindowGuards, createMainWindow, loadHostUrl, loadShellPage } from './window.js'
+import { applyDesktopIcon, attachWindowGuards, createMainWindow, loadHostUrl, loadShellPage } from './window.js'
 
 const GITHUB_REPO = process.env.DSH_DESKTOP_GITHUB_REPO ?? process.env.DSH_APP_GITHUB_REPO ?? ''
 const WATCH_MS = 8_000
@@ -853,6 +853,7 @@ if (
 }
 
 void app.whenReady().then(async () => {
+  applyDesktopIcon()
   registerIpc()
   registerMenu()
   applyOpenAtLogin(loadSettings(userData()).openAtLogin)

@@ -14,3 +14,7 @@ export function rendererFile(name: string): string {
 export function desktopIconFile(): string {
   return join(here, '..', '..', 'build', 'icon.png')
 }
+
+export function resolveDesktopIconFile(exists: (file: string) => boolean, candidates: string[]): string | null {
+  return candidates.find((file) => exists(file)) ?? null
+}

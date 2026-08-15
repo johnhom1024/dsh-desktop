@@ -46,6 +46,15 @@ vite.on('exit', (code) => {
 let electronStarted = false
 await waitForPort(vitePort, 20_000)
 
+const icon = run('node', ['scripts/write-icon.mjs'])
+const iconCode = await new Promise((resolve) => {
+  icon.on('exit', (code) => resolve(code ?? 1))
+})
+if (iconCode !== 0) {
+  vite.kill('SIGTERM')
+  process.exit(iconCode)
+}
+
 const build = run('pnpm', ['run', 'build:main'])
 const buildCode = await new Promise((resolve) => {
   build.on('exit', (code) => resolve(code ?? 1))

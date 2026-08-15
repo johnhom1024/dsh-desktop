@@ -1,10 +1,25 @@
-import { BrowserWindow, nativeImage, shell, type WebContents } from 'electron'
+import { existsSync } from 'node:fs'
+import { BrowserWindow, app, nativeImage, shell, type WebContents } from 'electron'
 import { clampWindowBounds, type WindowBounds } from './host-state.js'
-import { desktopIconFile } from './paths.js'
+import { desktopIconFile, resolveDesktopIconFile } from './paths.js'
 
-function desktopIcon(): Electron.NativeImage | undefined {
-  const icon = nativeImage.createFromPath(desktopIconFile())
+export function loadDesktopIcon(): Electron.NativeImage | undefined {
+  const file = resolveDesktopIconFile(existsSync, [desktopIconFile()])
+  if (!file) {
+    return undefined
+  }
+  const icon = nativeImage.createFromPath(file)
   return icon.isEmpty() ? undefined : icon
+}
+
+export function applyDesktopIcon(): void {
+  const icon = loadDesktopIcon()
+  if (!icon) {
+    return
+  }
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(icon)
+  }
 }
 
 export { TAB_BAR_HEIGHT } from './instance-views.js'
@@ -39,7 +54,7 @@ export function createMainWindow(opts: {
     show: false,
     backgroundColor: '#eef1f4',
     title: 'dsh-desktop',
-    icon: desktopIcon(),
+    icon: loadDesktopIcon(),
     webPreferences: {
       preload: opts.preloadPath,
       nodeIntegration: false,
