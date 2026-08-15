@@ -191,7 +191,7 @@ function openSettings(): void {
     return
   }
 
-  settingsWindow = createSettingsWindow(preloadFile('shell.js'), rendererFile('settings.html'))
+  settingsWindow = createSettingsWindow(preloadFile('settings.cjs'), rendererFile('settings.html'))
   settingsWindow.on('closed', () => {
     settingsWindow = null
   })
@@ -347,7 +347,7 @@ function ensureMainWindow(): BrowserWindow {
 
   const settings = loadSettings(userData())
   mainWindow = createMainWindow({
-    preloadPath: preloadFile('shell.js'),
+    preloadPath: preloadFile('shell.cjs'),
     bounds: settings.windowBounds,
   })
   hideInsteadOfClose(mainWindow, () => quitting)

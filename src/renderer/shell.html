@@ -122,6 +122,11 @@
     </main>
     <script>
       const api = window.dshShell
+      if (!api) {
+        document.querySelector('#status').textContent = '宿主接口未就绪，请重启应用。'
+        document.querySelector('#status').classList.add('error')
+        throw new Error('dshShell missing')
+      }
       const optionsEl = document.querySelector('#options')
       const installBtn = document.querySelector('#install')
       const statusEl = document.querySelector('#status')

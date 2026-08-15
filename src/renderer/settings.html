@@ -51,6 +51,10 @@
       const errorLine = document.querySelector('#errorLine')
       const updateStatus = document.querySelector('#updateStatus')
       const api = window.dshSettings
+      if (!api) {
+        updateStatus.textContent = '宿主接口未就绪，请重启应用。'
+        throw new Error('dshSettings missing')
+      }
 
       function readSettings() {
         return {

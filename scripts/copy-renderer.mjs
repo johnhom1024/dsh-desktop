@@ -3,13 +3,23 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const src = join(root, 'src', 'renderer')
-const dest = join(root, 'dist', 'renderer')
+const rendererSrc = join(root, 'src', 'renderer')
+const rendererDest = join(root, 'dist', 'renderer')
+const preloadSrc = join(root, 'src', 'preload')
+const preloadDest = join(root, 'dist', 'preload')
 
-mkdirSync(dest, { recursive: true })
+mkdirSync(rendererDest, { recursive: true })
+mkdirSync(preloadDest, { recursive: true })
 
-for (const file of readdirSync(src)) {
+for (const file of readdirSync(rendererSrc)) {
   if (file.endsWith('.html')) {
-    copyFileSync(join(src, file), join(dest, file))
+    copyFileSync(join(rendererSrc, file), join(rendererDest, file))
   }
 }
+
+for (const file of readdirSync(preloadSrc)) {
+  if (file.endsWith('.cjs')) {
+    copyFileSync(join(preloadSrc, file), join(preloadDest, file))
+  }
+}
+
