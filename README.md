@@ -15,7 +15,7 @@ This repo does **not** fork the official project. The desktop app only starts or
 
 If no official Web UI is found, the app stays on a host shell with **检测** and **设置**. The shell lists package managers already on `PATH` (`pnpm` first, then `npx`, `yarn`, `bunx`) and only runs an install/start command after you confirm. When the printed loopback port becomes ready, the official page opens.
 
-Closing the window hides the app to the menu-bar tray. Quit from the tray. Only a process started by this app is stopped on quit; a reused local instance is left running.
+Closing the window hides the app to the menu-bar tray. Quit from the tray. Only a process started by this app is stopped on quit; a reused local instance is left running. A second launch focuses the existing window instead of starting another process.
 
 Settings can enable **open at login** (packaged app only; writes a macOS login item and starts hidden to the tray). **Check for updates** compares `@deepseek-ai/dsh` against the npm registry. `dsh-app` itself is not published to npm, so the app version is shown but not auto-compared.
 

@@ -15,6 +15,7 @@ import { preloadFile, rendererFile } from './paths.js'
 import { probeHarnessWeb } from './probe.js'
 import { resolveRuntime, type RuntimeSource, type Settings } from './runtime.js'
 import { loadSettings, saveSettings } from './settings.js'
+import { bindSingleInstance } from './single-instance.js'
 import { createTray, hideInsteadOfClose } from './tray.js'
 import { checkUpdates, fetchNpmLatestVersion, type UpdateReport } from './updates.js'
 import { createMainWindow, createSettingsWindow, loadHarnessPage, loadShellPage } from './window.js'
@@ -89,6 +90,9 @@ async function discoverRuntime(): Promise<RuntimeSource> {
 function showMain(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore()
   }
   mainWindow.show()
   mainWindow.focus()
@@ -342,6 +346,23 @@ function registerIpc(): void {
   ipcMain.handle('shellOpenSettings', () => {
     openSettings()
   })
+}
+
+if (
+  !bindSingleInstance({
+    requestLock: () => app.requestSingleInstanceLock(),
+    onSecondInstance: (handler) => {
+      app.on('second-instance', handler)
+    },
+    quit: () => {
+      app.quit()
+    },
+    focusExisting: () => {
+      showMain()
+    },
+  })
+) {
+  app.quit()
 }
 
 void app.whenReady().then(async () => {
