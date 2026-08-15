@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { BrowserWindow, app, ipcMain } from 'electron'
+import { BrowserWindow, Menu, app, ipcMain, shell } from 'electron'
 import { findNpxCachedDsh, findPnpmDlxCachedDsh, readDshPackage } from './dsh-package.js'
 import { startHarnessWeb } from './harness-process.js'
 import { launchSpecFor } from './launch.js'
@@ -11,11 +11,12 @@ import {
   type PackageManagerId,
   type PackageManagerOption,
 } from './package-managers.js'
+import { preloadFile, rendererFile } from './paths.js'
 import { probeHarnessWeb } from './probe.js'
 import { resolveRuntime, type RuntimeSource, type Settings } from './runtime.js'
 import { loadSettings, saveSettings } from './settings.js'
-import { preloadFile, rendererFile } from './paths.js'
 import { createTray, hideInsteadOfClose } from './tray.js'
+import { checkUpdates, fetchNpmLatestVersion, type UpdateReport } from './updates.js'
 import { createMainWindow, createSettingsWindow, loadHarnessPage, loadShellPage } from './window.js'
 
 let mainWindow: BrowserWindow | null = null
@@ -42,6 +43,35 @@ function bundledPackage(): { packageRoot: string; version: string } | null {
   const packageRoot = join(app.getAppPath(), 'node_modules', '@deepseek-ai', 'dsh')
   const info = readDshPackage(packageRoot)
   return info ? { packageRoot, version: info.version } : null
+}
+
+function currentDshVersion(): string | null {
+  if (
+    currentSource.kind === 'pnpm-dlx' ||
+    currentSource.kind === 'npx-cache' ||
+    currentSource.kind === 'bundled'
+  ) {
+    return currentSource.version
+  }
+  return bundledPackage()?.version ?? null
+}
+
+function applyOpenAtLogin(enabled: boolean): void {
+  if (!app.isPackaged) {
+    return
+  }
+  app.setLoginItemSettings({
+    openAtLogin: enabled,
+    openAsHidden: true,
+  })
+}
+
+function persistSettings(settings: Settings): boolean {
+  const ok = saveSettings(app.getPath('userData'), settings)
+  if (ok) {
+    applyOpenAtLogin(loadSettings(app.getPath('userData')).openAtLogin)
+  }
+  return ok
 }
 
 async function discoverRuntime(): Promise<RuntimeSource> {
@@ -208,24 +238,96 @@ function ensureMainWindow(): BrowserWindow {
   return mainWindow
 }
 
+async function inspectUpdates(): Promise<UpdateReport> {
+  return checkUpdates({
+    appCurrent: app.getVersion(),
+    dshCurrent: currentDshVersion(),
+    fetchLatest: async (name) => {
+      if (name === '@deepseek-ai/dsh') {
+        return fetchNpmLatestVersion(name)
+      }
+      return null
+    },
+  })
+}
+
 async function quitApp(): Promise<void> {
   quitting = true
   await stopOwnedHarness()
   app.quit()
 }
 
+function registerMenu(): void {
+  const isMac = process.platform === 'darwin'
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              {
+                label: '设置…',
+                accelerator: 'CmdOrCtrl+,',
+                click: () => openSettings(),
+              },
+              {
+                label: '检测更新…',
+                click: () => {
+                  void inspectUpdates().then((report) => {
+                    if (settingsWindow && !settingsWindow.isDestroyed()) {
+                      settingsWindow.webContents.send('updatesResult', report)
+                    }
+                  })
+                  openSettings()
+                },
+              },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const },
+            ],
+          },
+        ]
+      : []),
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 function registerIpc(): void {
   ipcMain.handle('settingsGet', () => ({
     settings: loadSettings(app.getPath('userData')),
     sourceKind: currentSource.kind,
+    appVersion: app.getVersion(),
   }))
 
-  ipcMain.handle('settingsSave', (_event, settings: Settings) =>
-    saveSettings(app.getPath('userData'), settings),
-  )
+  ipcMain.handle('settingsSave', (_event, settings: Settings) => persistSettings(settings))
 
   ipcMain.handle('settingsReconnect', async () => {
     await connect({ preferShell: true })
+  })
+
+  ipcMain.handle('settingsCheckUpdates', () => inspectUpdates())
+
+  ipcMain.handle('settingsOpenExternal', (_event, url: string) => {
+    if (url.startsWith('https://www.npmjs.com/package/')) {
+      void shell.openExternal(url)
+    }
   })
 
   ipcMain.handle('shellGetState', () => shellState())
@@ -244,9 +346,19 @@ function registerIpc(): void {
 
 void app.whenReady().then(async () => {
   registerIpc()
+  registerMenu()
+  applyOpenAtLogin(loadSettings(app.getPath('userData')).openAtLogin)
   createTray({
     showMain,
     openSettings,
+    checkUpdates: () => {
+      openSettings()
+      void inspectUpdates().then((report) => {
+        if (settingsWindow && !settingsWindow.isDestroyed()) {
+          settingsWindow.webContents.send('updatesResult', report)
+        }
+      })
+    },
     quit: () => {
       void quitApp()
     },

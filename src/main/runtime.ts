@@ -6,6 +6,7 @@ export type Settings = {
   connectionMode: ConnectionMode
   localPort: number
   remoteUrl?: string
+  openAtLogin: boolean
 }
 
 export type DshPackage = {

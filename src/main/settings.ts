@@ -2,7 +2,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_LOCAL_PORT, type ConnectionMode, type Settings } from './runtime.js'
 
-const DEFAULT_SETTINGS: Settings = { connectionMode: 'smart', localPort: DEFAULT_LOCAL_PORT }
+const DEFAULT_SETTINGS: Settings = {
+  connectionMode: 'smart',
+  localPort: DEFAULT_LOCAL_PORT,
+  openAtLogin: false,
+}
 
 function isHttpUrl(value: string): boolean {
   try {
@@ -26,7 +30,12 @@ function normalize(raw: unknown): Settings {
     return { ...DEFAULT_SETTINGS }
   }
 
-  const candidate = raw as { connectionMode?: unknown; remoteUrl?: unknown; localPort?: unknown }
+  const candidate = raw as {
+    connectionMode?: unknown
+    remoteUrl?: unknown
+    localPort?: unknown
+    openAtLogin?: unknown
+  }
   const connectionMode: ConnectionMode =
     candidate.connectionMode === 'local-only' ||
     candidate.connectionMode === 'remote' ||
@@ -35,7 +44,11 @@ function normalize(raw: unknown): Settings {
       : 'smart'
 
   const localPort = parseLocalPort(candidate.localPort) ?? DEFAULT_LOCAL_PORT
-  const next: Settings = { connectionMode, localPort }
+  const next: Settings = {
+    connectionMode,
+    localPort,
+    openAtLogin: candidate.openAtLogin === true,
+  }
 
   if (typeof candidate.remoteUrl === 'string' && isHttpUrl(candidate.remoteUrl)) {
     next.remoteUrl = candidate.remoteUrl
@@ -54,7 +67,10 @@ export function loadSettings(userDataDir: string): Settings {
 
 export function saveSettings(
   userDataDir: string,
-  settings: Omit<Settings, 'localPort'> & { localPort?: unknown },
+  settings: Omit<Settings, 'localPort' | 'openAtLogin'> & {
+    localPort?: unknown
+    openAtLogin?: unknown
+  },
 ): boolean {
   if (settings.localPort !== undefined && parseLocalPort(settings.localPort) === null) {
     return false

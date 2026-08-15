@@ -7,7 +7,7 @@ const pnpmDlx = { packageRoot: '/pnpm/dlx/dsh', version: '0.1.0-rc.6' }
 const npxCache = { packageRoot: '/npx/dsh', version: '0.1.0' }
 
 function settings(partial: Partial<Settings> = {}): Settings {
-  return { connectionMode: 'smart', localPort: 3080, ...partial }
+  return { connectionMode: 'smart', localPort: 3080, openAtLogin: false, ...partial }
 }
 
 test('smart mode reuses local 3080 before path, pnpm dlx, npx, or bundled', async () => {

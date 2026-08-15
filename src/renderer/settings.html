@@ -7,10 +7,12 @@
       :root { color-scheme: light dark; }
       body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; margin: 24px; }
       label { display: block; margin: 12px 0 6px; }
-      select, input { width: 100%; box-sizing: border-box; padding: 8px; }
-      .row { margin-top: 16px; display: flex; gap: 8px; }
+      select, input[type="number"], input[type="url"], input[type="text"] { width: 100%; box-sizing: border-box; padding: 8px; }
+      .check { display: flex; align-items: center; gap: 8px; margin: 16px 0 0; }
+      .check input { margin: 0; }
+      .row { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
       button { padding: 8px 14px; }
-      .status { margin-top: 16px; color: #57606a; }
+      .status { margin-top: 16px; color: #57606a; white-space: pre-line; }
       .hint { margin: 6px 0 0; color: #57606a; font-size: 12px; }
     </style>
   </head>
@@ -27,16 +29,25 @@
     <p class="hint">智能连接会先探测 <code>127.0.0.1</code> 上这个端口。默认 3080。</p>
     <label for="remoteUrl">远程 URL</label>
     <input id="remoteUrl" placeholder="http://192.168.31.229:3080" />
-    <p class="status">当前来源：<span id="source">unknown</span></p>
+    <label class="check">
+      <input id="openAtLogin" type="checkbox" />
+      登录时自动启动
+    </label>
+    <p class="hint">会写入 macOS 登录项，启动后藏在托盘。开发模式（<code>pnpm dev</code>）下不一定生效。</p>
+    <p class="status" id="sourceLine">当前来源：<span id="source">unknown</span></p>
+    <p class="status" id="updateStatus">应用版本：…</p>
     <div class="row">
       <button id="save" type="button">保存</button>
       <button id="reconnect" type="button">重新连接</button>
+      <button id="checkUpdates" type="button">检测更新</button>
     </div>
     <script>
       const mode = document.querySelector('#mode')
       const localPort = document.querySelector('#localPort')
       const remoteUrl = document.querySelector('#remoteUrl')
+      const openAtLogin = document.querySelector('#openAtLogin')
       const source = document.querySelector('#source')
+      const updateStatus = document.querySelector('#updateStatus')
       const api = window.dshSettings
 
       function readSettings() {
@@ -44,6 +55,18 @@
           connectionMode: mode.value,
           localPort: Number(localPort.value),
           remoteUrl: remoteUrl.value.trim() || undefined,
+          openAtLogin: openAtLogin.checked,
+        }
+      }
+
+      function renderUpdate(report) {
+        if (!report) return
+        const appLine = 'dsh-app ' + (report.app.current || '?') + ' → ' + (report.app.latest || '未知')
+        const dshLine = '@deepseek-ai/dsh ' + (report.dsh.current || '未安装') + ' → ' + (report.dsh.latest || '未知')
+        if (report.app.updateAvailable || report.dsh.updateAvailable) {
+          updateStatus.textContent = '发现更新\n' + appLine + '\n' + dshLine
+        } else {
+          updateStatus.textContent = '当前已是最新\n' + appLine + '\n' + dshLine
         }
       }
 
@@ -52,7 +75,9 @@
         mode.value = view.settings.connectionMode
         localPort.value = String(view.settings.localPort || 3080)
         remoteUrl.value = view.settings.remoteUrl || ''
+        openAtLogin.checked = Boolean(view.settings.openAtLogin)
         source.textContent = view.sourceKind
+        updateStatus.textContent = '应用版本：' + (view.appVersion || 'unknown')
       }
 
       document.querySelector('#save').addEventListener('click', async () => {
@@ -69,6 +94,19 @@
         await api.reconnect()
         await refresh()
       })
+
+      document.querySelector('#checkUpdates').addEventListener('click', async () => {
+        updateStatus.textContent = '正在查询 npm registry…'
+        try {
+          renderUpdate(await api.checkUpdates())
+        } catch (error) {
+          updateStatus.textContent = error && error.message ? error.message : String(error)
+        }
+      })
+
+      if (api.onUpdatesResult) {
+        api.onUpdatesResult(renderUpdate)
+      }
 
       refresh()
     </script>
