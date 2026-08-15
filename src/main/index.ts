@@ -16,6 +16,7 @@ import { probeHarnessWeb } from './probe.js'
 import { resolveRuntime, type RuntimeSource, type Settings } from './runtime.js'
 import { loadSettings, saveSettings } from './settings.js'
 import { bindSingleInstance } from './single-instance.js'
+import { repairProcessPath } from './path-repair.js'
 import { createTray, hideInsteadOfClose } from './tray.js'
 import { checkUpdates, fetchNpmLatestVersion, type UpdateReport } from './updates.js'
 import { createMainWindow, createSettingsWindow, loadHarnessPage, loadShellPage } from './window.js'
@@ -347,6 +348,8 @@ function registerIpc(): void {
     openSettings()
   })
 }
+
+repairProcessPath()
 
 if (
   !bindSingleInstance({
