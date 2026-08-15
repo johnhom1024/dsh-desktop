@@ -11,5 +11,6 @@
     "verbatimModuleSyntax": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/main/**/*.ts", "src/preload/**/*.ts"],
+  "exclude": ["src/renderer/**"]
 }

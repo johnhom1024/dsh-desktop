@@ -16,5 +16,5 @@
     "types": ["node"]
   },
   "include": ["src/main/**/*.ts"],
-  "exclude": ["src/main/**/*.test.ts"]
+  "exclude": ["src/main/**/*.test.ts", "src/renderer/**"]
 }
