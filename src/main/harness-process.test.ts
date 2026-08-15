@@ -68,6 +68,60 @@ test('startHarnessWeb stops the child and throws when the url never appears', as
   )
 })
 
+test('stop kills grandchild processes started by the spawned command', async () => {
+  const stamp = Date.now()
+  const serverScript = join(tmpdir(), `fake-dsh-orphan-server-${stamp}.mjs`)
+  const parentScript = join(tmpdir(), `fake-dsh-orphan-parent-${stamp}.mjs`)
+  await writeFile(
+    serverScript,
+    `
+import { createServer } from 'node:http'
+const server = createServer((_req, res) => {
+  res.writeHead(200, { 'content-type': 'text/html' })
+  res.end('<title>DeepSeek Harness</title>')
+})
+server.listen(0, '127.0.0.1', () => {
+  const { port } = server.address()
+  console.log('listening on http://127.0.0.1:' + port + '/')
+})
+`,
+    'utf8',
+  )
+  await writeFile(
+    parentScript,
+    `
+import { spawn } from 'node:child_process'
+const child = spawn(process.execPath, [${JSON.stringify(serverScript)}], {
+  stdio: ['ignore', 'inherit', 'inherit'],
+})
+child.on('error', (error) => {
+  console.error(error)
+  process.exit(1)
+})
+setInterval(() => {}, 10_000)
+`,
+    'utf8',
+  )
+
+  const started = await startHarnessWeb({
+    command: process.execPath,
+    args: [parentScript],
+    probe: async (url) => {
+      const response = await fetch(url)
+      const body = await response.text()
+      return response.ok && body.includes('DeepSeek Harness')
+    },
+    timeoutMs: 5000,
+  })
+
+  const response = await fetch(started.url)
+  equal(response.ok, true)
+  await started.stop()
+
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  await rejects(() => fetch(started.url, { signal: AbortSignal.timeout(500) }))
+})
+
 test('startHarnessWeb forwards stdout and stderr through onOutput', async () => {
   const script = join(tmpdir(), `fake-dsh-log-${Date.now()}.mjs`)
   await writeFile(

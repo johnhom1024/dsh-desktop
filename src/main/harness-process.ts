@@ -26,12 +26,30 @@ async function waitForExit(child: ChildProcess): Promise<void> {
   })
 }
 
+function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal)
+  } catch {
+    try {
+      process.kill(pid, signal)
+    } catch {
+      // already gone
+    }
+  }
+}
+
 export async function stopChild(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {
     return
   }
 
-  child.kill('SIGTERM')
+  const pid = child.pid
+  if (pid) {
+    signalProcessGroup(pid, 'SIGTERM')
+  } else {
+    child.kill('SIGTERM')
+  }
+
   const timedOut = await Promise.race([
     waitForExit(child).then(() => false),
     new Promise<boolean>((resolve) => {
@@ -40,7 +58,11 @@ export async function stopChild(child: ChildProcess): Promise<void> {
   ])
 
   if (timedOut && child.exitCode === null && child.signalCode === null) {
-    child.kill('SIGKILL')
+    if (pid) {
+      signalProcessGroup(pid, 'SIGKILL')
+    } else {
+      child.kill('SIGKILL')
+    }
     await waitForExit(child)
   }
 }
@@ -59,6 +81,7 @@ export async function startHarnessWeb(opts: {
     cwd: opts.cwd,
     env: opts.env,
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
   })
 
   const stop = () => stopChild(child)
