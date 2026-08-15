@@ -1,0 +1,21 @@
+appId: cn.johnhong.dsh-app
+productName: dsh-app
+copyright: Copyright © 2026 johnhom
+npmRebuild: false
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+dmg:
+  artifactName: ${productName}-${version}-${arch}.dmg
+  title: dsh-app ${version}

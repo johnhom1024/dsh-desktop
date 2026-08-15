@@ -1,7 +1,6 @@
 import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { BrowserWindow, app, ipcMain } from 'electron'
 import { findNpxCachedDsh, findPnpmDlxCachedDsh, readDshPackage } from './dsh-package.js'
 import { startHarnessWeb } from './harness-process.js'
@@ -15,10 +14,9 @@ import {
 import { probeHarnessWeb } from './probe.js'
 import { resolveRuntime, type RuntimeSource, type Settings } from './runtime.js'
 import { loadSettings, saveSettings } from './settings.js'
+import { preloadFile, rendererFile } from './paths.js'
 import { createTray, hideInsteadOfClose } from './tray.js'
 import { createMainWindow, createSettingsWindow, loadHarnessPage, loadShellPage } from './window.js'
-
-const here = dirname(fileURLToPath(import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
@@ -73,10 +71,7 @@ function openSettings(): void {
     return
   }
 
-  settingsWindow = createSettingsWindow(
-    join(here, '../preload/shell.js'),
-    join(app.getAppPath(), 'src/renderer/settings.html'),
-  )
+  settingsWindow = createSettingsWindow(preloadFile('shell.js'), rendererFile('settings.html'))
   settingsWindow.on('closed', () => {
     settingsWindow = null
   })
@@ -86,7 +81,7 @@ function showShell(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
   }
-  loadShellPage(mainWindow, join(app.getAppPath(), 'src/renderer/shell.html'))
+  loadShellPage(mainWindow, rendererFile('shell.html'))
 }
 
 function showHarness(url: string): void {
@@ -204,7 +199,7 @@ function ensureMainWindow(): BrowserWindow {
   }
 
   mainWindow = createMainWindow({
-    preloadPath: join(here, '../preload/shell.js'),
+    preloadPath: preloadFile('shell.js'),
   })
   hideInsteadOfClose(mainWindow, () => quitting)
   mainWindow.on('closed', () => {

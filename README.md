@@ -17,6 +17,16 @@ If no official Web UI is found, the app stays on a host shell with **检测** an
 
 Closing the window hides the app to the menu-bar tray. Quit from the tray. Only a process started by this app is stopped on quit; a reused local instance is left running.
 
+## Package
+
+Unsigned Apple Silicon DMG (no notarization):
+
+```bash
+pnpm dist:mac
+```
+
+Output: `release/dsh-app-0.1.0-arm64.dmg`. macOS will warn that the app is unsigned; open it from Finder or right-click → Open.
+
 ## Develop
 
 Requires Node 22.15+ and pnpm.
