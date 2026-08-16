@@ -27,7 +27,7 @@
 这个仓库**不 fork** 官方项目。桌面端只负责进程、连接、托盘和设置。Agent 能力和官方 Web UI 仍在 DeepSeek Harness 里。
 
 <p align="center">
-  <img src="docs/screenshots/idle.svg" width="880" alt="空状态：本机还没有 DeepSeek Harness 服务">
+  <img src="docs/screenshots/home.jpg" width="880" alt="空状态：本机还没有 DeepSeek Harness 服务">
 </p>
 
 ## 为什么做这个
@@ -38,7 +38,7 @@ DeepSeek Harness 一般是在终端里跑 `dsh web` 或 `pnpm dlx`。能用，�
 
 - 第一次打开会停在空状态，你没点确认前不会装任何东西
 - 之后可以复用 `http://127.0.0.1:<端口>`，或替你拉起 `dsh web`
-- 关窗口只是藏到托盘；真正退出走托盘或应用菜单
+- 关窗口只是藏到托盘；`Cmd+Q`、应用菜单「退出」或托盘「退出」会真正退出
 
 ## 功能
 
@@ -50,7 +50,7 @@ DeepSeek Harness 一般是在终端里跑 `dsh web` 或 `pnpm dlx`。能用，�
 - **只翻宿主** — 官方 DeepSeek Harness 页面的语言仍由官方 UI 自己决定
 
 <p align="center">
-  <img src="docs/screenshots/settings.svg" width="880" alt="设置页：连接、启动命令和语言">
+  <img src="docs/screenshots/settings.jpg" width="880" alt="设置页：连接、启动命令和语言">
 </p>
 
 ## 安装
@@ -68,6 +68,14 @@ pnpm dist:mac
 - `release/SHA256SUMS.txt`
 
 打开时系统会提示未签名。在访达里右键 → **打开** 即可。
+
+如果提示应用**已损坏，无法打开**，一般是未签名下载被 Gatekeeper 加上了隔离属性，不是安装包坏了。把应用放到 `/Applications` 后，在终端执行：
+
+```bash
+sudo xattr -r -d com.apple.quarantine /Applications/dsh-desktop.app
+```
+
+然后再打开即可。
 
 签名和公证需要 Apple Developer ID，这里刻意不做。
 

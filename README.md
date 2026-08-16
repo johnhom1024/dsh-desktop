@@ -27,7 +27,7 @@
 This repo does **not** fork the official project. The desktop app only owns process lifecycle, connection, tray, and settings. Agent work and the official Web UI stay in DeepSeek Harness.
 
 <p align="center">
-  <img src="docs/screenshots/idle.svg" width="880" alt="Idle state: no local DeepSeek Harness service is running">
+  <img src="docs/screenshots/home.jpg" width="880" alt="Idle state: no local DeepSeek Harness service is running">
 </p>
 
 ## Why this exists
@@ -38,7 +38,7 @@ DeepSeek Harness is a web app you usually start with `dsh web` or `pnpm dlx`. Th
 
 - First launch stays idle. Nothing is installed until you confirm a start command.
 - After that, the host can reuse `http://127.0.0.1:<port>` or start `dsh web` for you.
-- Closing the window hides to the tray. Quitting happens from the tray or the app menu.
+- Closing the window hides to the tray. `Cmd+Q`, **Quit** in the app menu, or **Quit** in the tray exits completely.
 
 ## Features
 
@@ -50,7 +50,7 @@ DeepSeek Harness is a web app you usually start with `dsh web` or `pnpm dlx`. Th
 - **Host chrome only** — the official DeepSeek Harness page keeps its own language
 
 <p align="center">
-  <img src="docs/screenshots/settings.svg" width="880" alt="Settings: connection, start command, and language">
+  <img src="docs/screenshots/settings.jpg" width="880" alt="Settings: connection, start command, and language">
 </p>
 
 ## Install
@@ -68,6 +68,14 @@ Output:
 - `release/SHA256SUMS.txt`
 
 macOS will warn that the app is unsigned. Open it from Finder, or right-click → **Open**.
+
+If macOS says the app is **damaged** and cannot be opened, that is Gatekeeper quarantine on an unsigned download, not a broken binary. After moving it to `/Applications`, run:
+
+```bash
+sudo xattr -r -d com.apple.quarantine /Applications/dsh-desktop.app
+```
+
+Then open the app again.
 
 Code signing and notarization need an Apple Developer ID. That is intentionally not done here.
 

@@ -360,6 +360,10 @@ function handleHostShortcut(action: HostShortcut, source: WebContents): void {
     toggleDevTools(source)
     return
   }
+  if (action === 'quit') {
+    void quitApp()
+    return
+  }
   openSettings()
 }
 
@@ -826,6 +830,9 @@ async function inspectUpdates(target: UpdateTarget = 'both'): Promise<UpdateRepo
 }
 
 async function quitApp(): Promise<void> {
+  if (quitting) {
+    return
+  }
   quitting = true
   stopWatch()
   persistWindowBounds()
@@ -1128,6 +1135,14 @@ void app.whenReady().then(async () => {
   tray = createTray(trayActions())
   ensureMainWindow()
   await connectActive()
+})
+
+app.on('before-quit', (event) => {
+  if (quitting) {
+    return
+  }
+  event.preventDefault()
+  void quitApp()
 })
 
 app.on('window-all-closed', () => {

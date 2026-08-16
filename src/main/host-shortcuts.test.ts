@@ -63,3 +63,11 @@ test('Cmd+I without Option is not DevTools', () => {
     null,
   )
 })
+
+test('Cmd+Q quits the app', () => {
+  equal(hostShortcutFor({ ...keyDown, key: 'q', meta: true }, { isMac: true, isDev: true }), 'quit')
+  equal(
+    hostShortcutFor({ ...keyDown, key: 'q', control: true }, { isMac: false, isDev: false }),
+    'quit',
+  )
+})
