@@ -164,6 +164,8 @@ export function HostApp({ api }: HostAppProps) {
   const toastIdRef = useRef(0)
   const lastToastErrorRef = useRef<string | null>(null)
   const stateRef = useRef<ShellState | null>(null)
+  const logRef = useRef<HTMLPreElement | null>(null)
+  const stickLogToBottomRef = useRef(true)
 
   function showToast(description: string, title?: string) {
     toastIdRef.current += 1
@@ -330,6 +332,16 @@ export function HostApp({ api }: HostAppProps) {
       setBusy(false)
     }
   }
+
+  useEffect(() => {
+    const el = logRef.current
+    if (!el || !log) {
+      return
+    }
+    if (stickLogToBottomRef.current) {
+      el.scrollTop = el.scrollHeight
+    }
+  }, [log])
 
   useEffect(() => {
     const stopLog = api.onInstallLog((text) => {
@@ -752,7 +764,16 @@ export function HostApp({ api }: HostAppProps) {
                   {status}
                 </p>
                 {log ? (
-                  <pre id="log" className="max-h-52 overflow-auto whitespace-pre-wrap rounded-lg border bg-muted p-3 font-mono text-xs">
+                  <pre
+                    id="log"
+                    ref={logRef}
+                    className="max-h-52 overflow-auto whitespace-pre-wrap rounded-lg border bg-muted p-3 font-mono text-xs"
+                    onScroll={(event) => {
+                      const el = event.currentTarget
+                      stickLogToBottomRef.current =
+                        el.scrollHeight - el.scrollTop - el.clientHeight < 24
+                    }}
+                  >
                     {log}
                   </pre>
                 ) : null}
@@ -791,6 +812,7 @@ export function HostApp({ api }: HostAppProps) {
                       return
                     }
                     stayInSettingsWhileStartingRef.current = true
+                    stickLogToBottomRef.current = true
                     setLog('')
                     void run('正在执行命令，启动日志会显示在下方…', () =>
                       api.install(selectedId, { localPort: parsedPort }),
