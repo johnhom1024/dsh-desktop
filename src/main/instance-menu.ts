@@ -1,3 +1,5 @@
+import { t } from '../i18n/index.js'
+
 export type InstanceMenuAction = 'rename' | 'reload' | 'open-external'
 
 export type InstanceMenuItem = {
@@ -11,19 +13,19 @@ export function instanceMenuItems(canReload: boolean, canOpenExternal: boolean):
   return [
     {
       id: 'rename',
-      label: '重命名',
+      label: t('instanceMenu.rename'),
       symbol: 'pencil',
       enabled: true,
     },
     {
       id: 'reload',
-      label: '刷新',
+      label: t('instanceMenu.reload'),
       symbol: 'arrow.clockwise',
       enabled: canReload,
     },
     {
       id: 'open-external',
-      label: '浏览器打开',
+      label: t('instanceMenu.openExternal'),
       symbol: 'safari',
       enabled: canOpenExternal,
     },

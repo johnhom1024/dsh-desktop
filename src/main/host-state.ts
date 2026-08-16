@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { t } from '../i18n/index.js'
 import type { RuntimeSource } from './runtime.js'
 
 export type WindowBounds = {
@@ -20,20 +21,20 @@ export function clampWindowBounds(bounds: WindowBounds): WindowBounds {
 
 export function formatTrayStatus(source: RuntimeSource, url: string | null): string {
   if (!url || source.kind === 'none') {
-    return '未连接'
+    return t('tray.disconnected')
   }
 
   try {
     const parsed = new URL(url)
     if (source.kind === 'remote') {
-      return `已连接 · 远程 ${parsed.host}`
+      return t('tray.connectedRemote', { host: parsed.host })
     }
     if (source.kind === 'reuse-local') {
-      return `已连接 · 本机 ${parsed.port || '80'}`
+      return t('tray.connectedLocal', { port: parsed.port || '80' })
     }
-    return `已连接 · ${source.kind} ${parsed.host}`
+    return t('tray.connectedKind', { kind: source.kind, host: parsed.host })
   } catch {
-    return '已连接'
+    return t('tray.connected')
   }
 }
 

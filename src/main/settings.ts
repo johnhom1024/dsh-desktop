@@ -124,6 +124,7 @@ export type SettingsInput = {
   openAtLogin?: unknown
   autoStart?: unknown
   lastPackageManager?: unknown
+  locale?: unknown
   windowBounds?: unknown
 }
 
@@ -180,6 +181,10 @@ function normalize(raw: unknown): Settings {
     activeInstanceId,
     openAtLogin: candidate.openAtLogin === true,
     autoStart: candidate.autoStart === true,
+    locale:
+      candidate.locale === 'zh-CN' || candidate.locale === 'en' || candidate.locale === 'system'
+        ? candidate.locale
+        : 'system',
   }
 
   if (

@@ -3,7 +3,11 @@ import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { changeLanguage, ready } from '../i18n/index.js'
 import { appendHostLog, clampWindowBounds, formatTrayStatus } from './host-state.js'
+
+await ready()
+await changeLanguage('zh-CN')
 
 test('clampWindowBounds keeps a usable size on the saved origin', () => {
   deepEqual(clampWindowBounds({ x: 12, y: 24, width: 80, height: 40 }), {

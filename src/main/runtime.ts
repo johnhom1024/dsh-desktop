@@ -23,6 +23,7 @@ export type Settings = {
   activeInstanceId: string
   openAtLogin: boolean
   autoStart: boolean
+  locale?: 'system' | 'zh-CN' | 'en'
   lastPackageManager?: PackageManagerId
   windowBounds?: WindowBounds
 }
@@ -63,6 +64,7 @@ export function defaultSettings(): Settings {
     activeInstanceId: local.id,
     openAtLogin: false,
     autoStart: false,
+    locale: 'system',
   }
 }
 

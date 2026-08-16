@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { t } from '../i18n'
 import { HostApp } from './HostApp'
 import './styles.css'
 
@@ -10,7 +11,7 @@ if (!root) {
 
 const api = window.dshShell
 if (!api) {
-  root.textContent = '宿主接口未就绪，请重启应用。'
+  root.textContent = t('status.missingApi')
   throw new Error('dshShell missing')
 }
 

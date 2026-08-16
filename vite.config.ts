@@ -24,7 +24,16 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'lucide-react', 'clsx', 'tailwind-merge', 'class-variance-authority'],
+    include: [
+      'react',
+      'react-dom',
+      'lucide-react',
+      'clsx',
+      'tailwind-merge',
+      'class-variance-authority',
+      'i18next',
+      'react-i18next',
+    ],
   },
   build: {
     outDir: resolve(rootDir, 'dist/renderer'),

@@ -17,6 +17,7 @@ const DEFAULTS = {
   activeInstanceId: 'local-3080',
   openAtLogin: false,
   autoStart: false,
+  locale: 'system',
 } as const
 
 test('parseConnectTarget accepts a host and port', () => {
@@ -209,6 +210,20 @@ test('saveSettings then loadSettings round-trips openAtLogin', async () => {
     true,
   )
   deepEqual(loadSettings(dir), { ...DEFAULTS, openAtLogin: true })
+})
+
+test('saveSettings then loadSettings round-trips locale', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+
+  equal(
+    saveSettings(dir, {
+      instances: [LOCAL_3080],
+      activeInstanceId: 'local-3080',
+      locale: 'en',
+    }),
+    true,
+  )
+  deepEqual(loadSettings(dir), { ...DEFAULTS, locale: 'en' })
 })
 
 test('saveSettings then loadSettings round-trips lastPackageManager and window bounds', async () => {

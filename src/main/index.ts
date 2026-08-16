@@ -44,7 +44,7 @@ import {
 } from './runtime.js'
 import { isLoopbackHost, loadSettings, parseConnectTarget, parseLocalPort, saveSettings } from './settings.js'
 import { bindSingleInstance } from './single-instance.js'
-import { createTray, hideInsteadOfClose, setTrayStatus } from './tray.js'
+import { applyTrayMenu, createTray, hideInsteadOfClose, setTrayStatus } from './tray.js'
 import {
   checkUpdates,
   fetchGithubLatestTag,
@@ -53,6 +53,16 @@ import {
   type UpdateTarget,
 } from './updates.js'
 import { applyDesktopIcon, attachWindowGuards, createMainWindow, loadHostUrl, loadShellPage } from './window.js'
+import {
+  changeLanguage,
+  isLocalePreference,
+  ready,
+  resolveLocale,
+  t,
+  toHostError,
+  type HostError,
+  type LocalePreference,
+} from '../i18n/index.js'
 
 const GITHUB_REPO = process.env.DSH_DESKTOP_GITHUB_REPO ?? process.env.DSH_APP_GITHUB_REPO ?? ''
 const WATCH_MS = 8_000
@@ -61,7 +71,7 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let currentSource: RuntimeSource = { kind: 'none' }
 let currentUrl: string | null = null
-let lastError: string | null = null
+let lastError: HostError | null = null
 let starting = false
 let stopHarness: (() => Promise<void>) | null = null
 let quitting = false
@@ -185,11 +195,46 @@ function persistWindowBounds(): void {
   }, 300)
 }
 
+function trayActions() {
+  return {
+    showMain,
+    openSettings,
+    detect: () => {
+      void connectActive()
+    },
+    checkUpdates: () => {
+      openSettings()
+      void inspectUpdates().then((report) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('updatesResult', report)
+        }
+      })
+    },
+    quit: () => {
+      void quitApp()
+    },
+  }
+}
+
+function currentLocalePreference(): LocalePreference {
+  return loadSettings(userData()).locale ?? 'system'
+}
+
+async function applyLocale(preference: LocalePreference = currentLocalePreference()): Promise<void> {
+  await changeLanguage(resolveLocale(preference, app.getLocale()))
+  registerMenu()
+  if (tray && !tray.isDestroyed()) {
+    applyTrayMenu(tray, trayActions())
+  }
+  refreshTray()
+}
+
 function refreshTray(): void {
   if (!tray) {
     return
   }
-  setTrayStatus(tray, starting ? '正在启动…' : formatTrayStatus(currentSource, currentUrl))
+  const connected = Boolean(currentUrl && currentSource.kind !== 'none')
+  setTrayStatus(tray, starting ? t('tray.starting') : formatTrayStatus(currentSource, currentUrl), connected)
 }
 
 function stopWatch(): void {
@@ -208,7 +253,7 @@ function startWatch(url: string): void {
       }
       logShell(`lost ${url}`)
       currentUrl = null
-      lastError = 'DeepSeek Harness 已停止响应。'
+      lastError = { code: 'error.unresponsive' }
       stopWatch()
       hideInstanceViews()
       void pushState()
@@ -453,7 +498,7 @@ async function stopLocalService(): Promise<void> {
   if (active?.kind === 'remote') {
     currentSource = { kind: 'remote', url: active.url }
     currentUrl = null
-    lastError = '已断开远程连接。'
+    lastError = { code: 'error.remoteDisconnected' }
     hideInstanceViews()
     refreshTray()
     await pushState()
@@ -480,7 +525,7 @@ async function applySource(source: RuntimeSource): Promise<string | null> {
   if (source.kind === 'remote') {
     const reachable = await probeHarnessWeb(source.url)
     if (!reachable) {
-      lastError = `远程实例不可达：${source.url}`
+      lastError = { code: 'error.remoteUnreachable', params: { url: source.url } }
       currentUrl = null
       return null
     }
@@ -502,7 +547,8 @@ export type ShellState = {
   instances: Instance[]
   activeInstanceId: string | null
   managers: PackageManagerOption[]
-  lastError: string | null
+  lastError: HostError | null
+  locale: LocalePreference
   lastPackageManager: PackageManagerId | null
   starting: boolean
   settingsOpen: boolean
@@ -523,6 +569,7 @@ async function shellState(): Promise<ShellState> {
     activeInstanceId: settings.activeInstanceId,
     managers: await detectPackageManagers(lookupOnPath, localPortFromSettings(settings)),
     lastError,
+    locale: settings.locale ?? 'system',
     lastPackageManager: settings.lastPackageManager ?? null,
     starting,
     settingsOpen: false,
@@ -555,14 +602,14 @@ function rememberLocalView(previousId: string | undefined, nextId: string | unde
 function applyLocalPort(port: unknown): boolean {
   const parsed = parseLocalPort(port)
   if (parsed === null) {
-    lastError = '端口必须是 1–65535 的整数'
+    lastError = { code: 'error.invalidPort' }
     return false
   }
   const current = loadSettings(userData())
   const previous = current.instances.find((item) => item.kind === 'local')
   const next = setLocalPort(current, parsed)
   if (!next) {
-    lastError = '端口必须是 1–65535 的整数'
+    lastError = { code: 'error.invalidPort' }
     return false
   }
   if (next !== current) {
@@ -575,7 +622,7 @@ function applyLocalPort(port: unknown): boolean {
 async function connectTarget(input: { host?: unknown; port?: unknown }): Promise<void> {
   const target = parseConnectTarget(input)
   if (!target) {
-    lastError = '请输入有效的 IP 和 1–65535 端口'
+    lastError = { code: 'error.invalidTarget' }
     await pushState()
     return
   }
@@ -587,7 +634,7 @@ async function connectTarget(input: { host?: unknown; port?: unknown }): Promise
     }
     await connectActive({ spawn: false })
     if (!currentUrl && !lastError) {
-      lastError = `http://${target.host}:${target.port} 上没有运行 DeepSeek Harness。可以启动服务。`
+      lastError = { code: 'error.notRunning', params: { url: `http://${target.host}:${target.port}` } }
       await pushState()
     }
     return
@@ -596,7 +643,7 @@ async function connectTarget(input: { host?: unknown; port?: unknown }): Promise
   const url = `http://${target.host}:${target.port}`
   const reachable = await probeHarnessWeb(url)
   if (!reachable) {
-    lastError = `无法连接到 ${url}。请确认那边已经启动 DeepSeek Harness。`
+    lastError = { code: 'error.unreachable', params: { url } }
     currentUrl = null
     hideInstanceViews()
     refreshTray()
@@ -643,11 +690,11 @@ async function connectActive(opts?: { spawn?: boolean }): Promise<void> {
       return
     }
   } catch (error) {
-    lastError = error instanceof Error ? error.message : String(error)
+    lastError = toHostError(error)
     if (currentSource.kind !== 'remote') {
       currentSource = { kind: 'none' }
     }
-    logShell(lastError)
+    logShell(lastError.code)
   }
 
   hideInstanceViews()
@@ -671,7 +718,7 @@ async function installWithManager(id: PackageManagerId): Promise<ShellState> {
   const managers = await detectPackageManagers(lookupOnPath, port)
   const chosen = managers.find((item) => item.id === id)
   if (!chosen) {
-    lastError = '没有找到这个包管理器，请先点检测。'
+    lastError = { code: 'error.managerMissing' }
     starting = false
     return shellState()
   }
@@ -714,8 +761,8 @@ async function installWithManager(id: PackageManagerId): Promise<ShellState> {
     starting = false
     currentSource = { kind: 'none' }
     currentUrl = null
-    lastError = error instanceof Error ? error.message : String(error)
-    logShell(lastError)
+    lastError = toHostError(error)
+    logShell(lastError.code)
     hideInstanceViews()
     refreshTray()
   }
@@ -798,18 +845,18 @@ function registerMenu(): void {
               { role: 'about' as const },
               { type: 'separator' as const },
               {
-                label: '设置…',
+                label: t('menu.settings'),
                 accelerator: 'CmdOrCtrl+,',
                 click: () => openSettings(),
               },
               {
-                label: '重新检测',
+                label: t('menu.detect'),
                 click: () => {
                   void connectActive()
                 },
               },
               {
-                label: '检测更新…',
+                label: t('menu.updates'),
                 click: () => {
                   void inspectUpdates().then((report) => {
                     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -830,7 +877,7 @@ function registerMenu(): void {
         ]
       : []),
     {
-      label: '编辑',
+      label: t('menu.edit'),
       submenu: [
         { role: 'undo' },
         { role: 'redo' },
@@ -842,22 +889,22 @@ function registerMenu(): void {
       ],
     },
     {
-      label: '查看',
+      label: t('menu.view'),
       submenu: [
         {
-          label: '刷新',
+          label: t('menu.reload'),
           accelerator: 'CmdOrCtrl+R',
           click: () => {
             reloadInstanceView()
           },
         },
         {
-          label: '开发者工具',
+          label: t('menu.devtools'),
           accelerator: 'Alt+CmdOrCtrl+I',
           click: () => toggleDevTools(),
         },
         {
-          label: '开发者工具（控制台）',
+          label: t('menu.devtoolsConsole'),
           accelerator: process.platform === 'darwin' ? 'Alt+Command+J' : 'Ctrl+Shift+J',
           click: () => toggleDevTools(),
         },
@@ -984,7 +1031,7 @@ function registerIpc(): void {
     async (_event, input: { name: string; kind: 'local' | 'remote'; url: string }) => {
       const next = upsertInstance(loadSettings(userData()), input)
       if (!next) {
-        lastError = '远程 URL 必须是 http 或 https'
+        lastError = { code: 'error.remoteUrl' }
         return shellState()
       }
       persistSettings(next)
@@ -998,7 +1045,7 @@ function registerIpc(): void {
     async (_event, input: { id: string; name: string; url: string }) => {
       const next = renameInstance(loadSettings(userData()), input.id, input.name)
       if (!next) {
-        lastError = '名称不能为空，且最多 20 个字'
+        lastError = { code: 'error.invalidName' }
         return shellState()
       }
       persistSettings(next)
@@ -1010,7 +1057,7 @@ function registerIpc(): void {
   ipcMain.handle('shellRemoveInstance', async (_event, id: string) => {
     const next = removeInstance(loadSettings(userData()), id)
     if (!next) {
-      lastError = '至少保留一个本机实例'
+      lastError = { code: 'error.keepLocal' }
       return shellState()
     }
     const view = instanceViews.get(id)
@@ -1023,16 +1070,24 @@ function registerIpc(): void {
     return shellState()
   })
 
-  ipcMain.handle('shellSaveHost', async (_event, input: { openAtLogin?: boolean; autoStart?: boolean }) => {
-    const current = loadSettings(userData())
-    const ok = persistSettings({
-      ...current,
-      openAtLogin: input.openAtLogin === undefined ? current.openAtLogin : input.openAtLogin === true,
-      autoStart: input.autoStart === undefined ? current.autoStart : input.autoStart === true,
-    })
-    await pushState()
-    return ok
-  })
+  ipcMain.handle(
+    'shellSaveHost',
+    async (_event, input: { openAtLogin?: boolean; autoStart?: boolean; locale?: unknown }) => {
+      const current = loadSettings(userData())
+      const nextLocale = isLocalePreference(input.locale) ? input.locale : current.locale ?? 'system'
+      const ok = persistSettings({
+        ...current,
+        openAtLogin: input.openAtLogin === undefined ? current.openAtLogin : input.openAtLogin === true,
+        autoStart: input.autoStart === undefined ? current.autoStart : input.autoStart === true,
+        locale: nextLocale,
+      })
+      if (ok && nextLocale !== (current.locale ?? 'system')) {
+        await applyLocale(nextLocale)
+      }
+      await pushState()
+      return ok
+    },
+  )
 
   ipcMain.handle('shellOpenUserData', () => {
     void shell.openPath(userData())
@@ -1065,28 +1120,12 @@ if (
 }
 
 void app.whenReady().then(async () => {
+  await ready()
   applyDesktopIcon()
   registerIpc()
-  registerMenu()
+  await applyLocale()
   applyOpenAtLogin(loadSettings(userData()).openAtLogin)
-  tray = createTray({
-    showMain,
-    openSettings,
-    detect: () => {
-      void connectActive()
-    },
-    checkUpdates: () => {
-      openSettings()
-      void inspectUpdates().then((report) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('updatesResult', report)
-        }
-      })
-    },
-    quit: () => {
-      void quitApp()
-    },
-  })
+  tray = createTray(trayActions())
   ensureMainWindow()
   await connectActive()
 })

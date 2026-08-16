@@ -12,14 +12,14 @@ export function nextTheme(current: ThemeMode): ThemeMode {
   return THEME_ORDER[(THEME_ORDER.indexOf(current) + 1) % THEME_ORDER.length]!
 }
 
-export function themeLabel(mode: ThemeMode): string {
+export function themeLabelKey(mode: ThemeMode): 'theme.light' | 'theme.dark' | 'theme.system' {
   switch (mode) {
     case 'light':
-      return '亮色'
+      return 'theme.light'
     case 'dark':
-      return '暗色'
+      return 'theme.dark'
     case 'system':
-      return '跟随系统'
+      return 'theme.system'
   }
 }
 

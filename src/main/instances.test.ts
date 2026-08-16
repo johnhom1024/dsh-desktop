@@ -5,7 +5,7 @@ import { instanceLabel, removeInstance, renameInstance, selectInstance, setLocal
 
 function base(): Settings {
   const local = defaultLocalInstance()
-  return { instances: [local], activeInstanceId: local.id, openAtLogin: false, autoStart: false }
+  return { instances: [local], activeInstanceId: local.id, openAtLogin: false, autoStart: false, locale: 'system' }
 }
 
 test('selectInstance rejects an unknown id', () => {
@@ -54,7 +54,7 @@ test('removeInstance moves activeId when the active tab is removed', () => {
     url: 'http://192.168.31.229:3080',
   }
   const next = removeInstance(
-    { instances: [local, remote], activeInstanceId: remote.id, openAtLogin: false, autoStart: false },
+    { instances: [local, remote], activeInstanceId: remote.id, openAtLogin: false, autoStart: false, locale: 'system' },
     remote.id,
   )
   deepEqual(next?.instances, [local])

@@ -75,7 +75,7 @@ test('startHarnessWeb stops the child and throws when the url never appears', as
         probe: async () => false,
         timeoutMs: 200,
       }),
-    /did not print a loopback url/i,
+    /error\.noLoopbackUrl/,
   )
 })
 
@@ -192,6 +192,6 @@ setInterval(() => {}, 1000)
         probe: async () => false,
         timeoutMs: 5000,
       }),
-    /等待交互确认/,
+    /error\.interactivePrompt/,
   )
 })

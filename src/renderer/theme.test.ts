@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { applyTheme, nativeThemeSource, nextTheme, readStoredTheme, resolveDark, themeLabel } from './theme'
+import { applyTheme, nativeThemeSource, nextTheme, readStoredTheme, resolveDark, themeLabelKey } from './theme'
 
 describe('theme', () => {
   test('cycles light, dark, then system', () => {
@@ -40,7 +40,7 @@ describe('theme', () => {
     expect(root.dataset.theme).toBe('dark')
     applyTheme('light', root, true)
     expect(classes.has('dark')).toBe(false)
-    expect(themeLabel('system')).toBe('跟随系统')
+    expect(themeLabelKey('system')).toBe('theme.system')
     expect(nativeThemeSource('light')).toBe('light')
     expect(nativeThemeSource('system')).toBe('system')
   })

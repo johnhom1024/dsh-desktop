@@ -12,7 +12,7 @@
     "build:main": "tsc -p tsconfig.main.json && node scripts/copy-preload.mjs",
     "build:renderer": "vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
-    "test": "tsx --test src/main/*.test.ts && vitest run",
+    "test": "tsx --test src/main/*.test.ts src/i18n/*.test.ts && vitest run",
     "dist:mac": "pnpm run build:main && pnpm run build:renderer && node scripts/write-icon.mjs && pnpm exec electron-builder --mac dmg --arm64 && node scripts/sha256-release.mjs release"
   },
   "engines": {
@@ -29,9 +29,11 @@
     "@tailwindcss/vite": "^4.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "i18next": "^26.3.6",
     "lucide-react": "^1.31.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-i18next": "^17.0.11",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3"
   },

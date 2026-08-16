@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { changeLanguage, ready } from '../i18n'
 import { HostApp } from './HostApp'
 import type { DshShellApi, ShellState } from './dsh-shell'
 
@@ -33,6 +34,7 @@ function shellState(overrides: Partial<ShellState> = {}): ShellState {
     activeInstanceId: 'local-18080',
     managers,
     lastError: null,
+    locale: 'zh-CN',
     lastPackageManager: 'pnpm',
     starting: false,
     settingsOpen: false,
@@ -96,6 +98,11 @@ function makeApi(overrides: Partial<DshShellApi> = {}) {
 }
 
 describe('HostApp', () => {
+  beforeEach(async () => {
+    await ready()
+    await changeLanguage('zh-CN')
+  })
+
   test('shows an idle prompt on the instance tab instead of auto-running a command', async () => {
     const { api, installed } = makeApi({
       getState: async () => shellState({ lastPackageManager: null }),
@@ -163,7 +170,7 @@ describe('HostApp', () => {
       getState: async () => shellState({ lastPackageManager: 'pnpm' }),
       detect: async () =>
         shellState({
-          lastError: 'http://127.0.0.1:18080 上没有运行 DeepSeek Harness。可以启动服务。',
+          lastError: { code: 'error.notRunning', params: { url: 'http://127.0.0.1:18080' } },
         }),
     })
     render(<HostApp api={api} />)
@@ -223,7 +230,8 @@ describe('HostApp', () => {
 
   test('shows the error message when a previous run failed', async () => {
     const { api } = makeApi({
-      getState: async () => shellState({ lastError: '端口 3080 启动超时，请检查日志。' }),
+      getState: async () =>
+        shellState({ lastError: { code: 'error.unknown', params: { message: '端口 3080 启动超时，请检查日志。' } } }),
     })
     render(<HostApp api={api} />)
 

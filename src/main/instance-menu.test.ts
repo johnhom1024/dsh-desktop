@@ -1,6 +1,10 @@
 import { deepEqual, equal } from 'node:assert/strict'
 import { test } from 'node:test'
+import { changeLanguage, ready } from '../i18n/index.js'
 import { instanceExternalUrl, instanceMenuItems } from './instance-menu.js'
+
+await ready()
+await changeLanguage('zh-CN')
 
 test('instanceMenuItems puts rename, reload, then browser open', () => {
   deepEqual(

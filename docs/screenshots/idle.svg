@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-label="dsh-desktop idle state">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f4f5"/>
+      <stop offset="1" stop-color="#e4e4e7"/>
+    </linearGradient>
+    <filter id="shadow" x="-8%" y="-8%" width="116%" height="124%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#18181b" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="1280" height="800" fill="url(#bg)"/>
+  <rect x="80" y="56" width="1120" height="688" rx="16" fill="#ffffff" stroke="#e4e4e7" filter="url(#shadow)"/>
+  <rect x="80" y="56" width="1120" height="52" rx="16" fill="#f4f4f5"/>
+  <rect x="80" y="92" width="1120" height="16" fill="#f4f4f5"/>
+  <circle cx="108" cy="82" r="6" fill="#ff5f57"/>
+  <circle cx="128" cy="82" r="6" fill="#febc2e"/>
+  <circle cx="148" cy="82" r="6" fill="#28c840"/>
+  <rect x="180" y="70" width="92" height="28" rx="8" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="226" y="89" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#18181b">Settings</text>
+  <rect x="280" y="70" width="168" height="28" rx="8" fill="#ffffff" stroke="#d4d4d8"/>
+  <circle cx="296" cy="84" r="3" fill="#18181b"/>
+  <text x="306" y="89" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#18181b">deepseek-harness</text>
+  <rect x="1148" y="72" width="28" height="24" rx="6" fill="none"/>
+  <circle cx="1162" cy="84" r="7" fill="none" stroke="#71717a" stroke-width="1.6"/>
+  <path d="M1157 84h10" stroke="#71717a" stroke-width="1.4" stroke-linecap="round"/>
+  <rect x="80" y="108" width="1120" height="1" fill="#e4e4e7"/>
+  <rect x="392" y="250" width="496" height="300" rx="16" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="640" y="318" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="26" font-weight="600" fill="#18181b">No service is running</text>
+  <text x="640" y="360" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="14" fill="#71717a">127.0.0.1:3080 is not serving the official web UI.</text>
+  <text x="640" y="382" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="14" fill="#71717a">Open Settings, pick a start command, and confirm.</text>
+  <rect x="556" y="430" width="168" height="36" rx="8" fill="#18181b"/>
+  <text x="640" y="453" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="14" fill="#ffffff">Open Settings</text>
+</svg>

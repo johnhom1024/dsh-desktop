@@ -1,8 +1,9 @@
+import type { HostError, LocalePreference } from '../i18n'
 import type { Instance } from '../main/runtime'
 import type { PackageManagerId, PackageManagerOption } from '../main/package-managers'
 import type { UpdateReport, VersionCheck } from '../main/updates'
 
-export type { Instance, PackageManagerId, PackageManagerOption, UpdateReport, VersionCheck }
+export type { HostError, Instance, LocalePreference, PackageManagerId, PackageManagerOption, UpdateReport, VersionCheck }
 
 export type ShellState = {
   detected: boolean
@@ -12,7 +13,8 @@ export type ShellState = {
   instances: Instance[]
   activeInstanceId: string | null
   managers: PackageManagerOption[]
-  lastError: string | null
+  lastError: HostError | null
+  locale: LocalePreference
   lastPackageManager: string | null
   starting: boolean
   settingsOpen: boolean
@@ -38,7 +40,7 @@ export type DshShellApi = {
   acquireOverlay: () => Promise<void>
   releaseOverlay: () => Promise<void>
   popupInstanceMenu: (input: { instanceId: string }) => Promise<'rename' | 'reload' | 'open-external' | null>
-  saveHost: (input: { openAtLogin?: boolean; autoStart?: boolean }) => Promise<boolean>
+  saveHost: (input: { openAtLogin?: boolean; autoStart?: boolean; locale?: LocalePreference }) => Promise<boolean>
   checkUpdates: (target?: 'app' | 'dsh' | 'both') => Promise<UpdateReport>
   openUserData: () => Promise<void>
   setTheme: (mode: 'light' | 'dark' | 'system') => Promise<void>

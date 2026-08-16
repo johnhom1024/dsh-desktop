@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { HostError, LocalePreference } from '../i18n/index.js'
 import type { Instance } from '../main/runtime.js'
 import type { PackageManagerOption } from '../main/package-managers.js'
 import type { UpdateReport } from '../main/updates.js'
@@ -11,7 +12,8 @@ export type ShellState = {
   instances: Instance[]
   activeInstanceId: string | null
   managers: PackageManagerOption[]
-  lastError: string | null
+  lastError: HostError | null
+  locale: LocalePreference
   lastPackageManager: string | null
   starting: boolean
   settingsOpen: boolean
@@ -43,7 +45,7 @@ contextBridge.exposeInMainWorld('dshShell', {
   releaseOverlay: (): Promise<void> => ipcRenderer.invoke('shellReleaseOverlay'),
   popupInstanceMenu: (input: { instanceId: string }): Promise<'rename' | 'reload' | 'open-external' | null> =>
     ipcRenderer.invoke('shellPopupInstanceMenu', input),
-  saveHost: (input: { openAtLogin?: boolean; autoStart?: boolean }): Promise<boolean> =>
+  saveHost: (input: { openAtLogin?: boolean; autoStart?: boolean; locale?: LocalePreference }): Promise<boolean> =>
     ipcRenderer.invoke('shellSaveHost', input),
   checkUpdates: (target?: 'app' | 'dsh' | 'both'): Promise<UpdateReport> =>
     ipcRenderer.invoke('settingsCheckUpdates', target),

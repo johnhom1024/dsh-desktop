@@ -96,6 +96,7 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 | `remoteUrl` | 仅 `http:` / `https:` |
 | `openAtLogin` | 登录自启，默认关 |
 | `autoStart` | 打开应用后是否自动拉起本机 `dsh web`，默认关 |
+| `locale` | `system` / `zh-CN` / `en`。宿主界面语言，默认跟随系统。只影响顶栏、设置、托盘和应用菜单，不改官方 Web UI |
 | `lastPackageManager` | 上次在设置里确认过的启动命令（pnpm / npm / yarn / bun） |
 | `windowBounds` | 主窗口位置和大小 |
 

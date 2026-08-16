@@ -1,5 +1,6 @@
 import { LoaderCircle, Monitor, Moon, Settings, Sun } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -17,8 +18,17 @@ import { Switch } from '@/components/ui/switch'
 import { Toaster, type ToastItem } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { InstanceTab } from './InstanceTab'
+import {
+  changeLanguage,
+  formatHostError,
+  isConnectFailure,
+  resolveLocale,
+  t as translate,
+  type LocalePreference,
+} from '../i18n'
 import type { DshShellApi, Instance, PackageManagerId, ShellState, UpdateReport, VersionCheck } from './dsh-shell'
-import { applyTheme, nextTheme, readStoredTheme, themeLabel, type ThemeMode } from './theme'
+import { I18nProvider } from './i18n'
+import { applyTheme, nextTheme, readStoredTheme, themeLabelKey, type ThemeMode } from './theme'
 
 type HostAppProps = {
   api: DshShellApi
@@ -43,36 +53,24 @@ function pickManager(state: ShellState, current: PackageManagerId | null): Packa
   return state.managers[0]?.id ?? null
 }
 
-function managerLabel(id: string | null | undefined): string {
-  switch (id) {
-    case 'pnpm':
-      return 'pnpm'
-    case 'npm':
-      return 'npm / npx'
-    case 'yarn':
-      return 'yarn'
-    case 'bun':
-      return 'bun'
-    default:
-      return '未记录'
-  }
+function versionLabel(check: VersionCheck | null, fallbackCurrent: string | null, unknownLabel: string): string {
+  return check?.current || fallbackCurrent || unknownLabel
 }
 
-function versionLabel(check: VersionCheck | null, fallbackCurrent: string | null): string {
-  return check?.current || fallbackCurrent || '未知'
-}
-
-function versionHint(check: VersionCheck | null): string | null {
+function versionHint(
+  check: VersionCheck | null,
+  labels: { latestFailed: string; available: (latest: string) => string; current: string },
+): string | null {
   if (!check || check.latest === undefined) {
     return null
   }
   if (!check.latest) {
-    return '未能获取最新版本'
+    return labels.latestFailed
   }
   if (check.updateAvailable) {
-    return `可更新至 ${check.latest}`
+    return labels.available(check.latest)
   }
-  return '已是最新'
+  return labels.current
 }
 
 function parsePortDraft(value: string): number | null {
@@ -85,17 +83,6 @@ function parsePortDraft(value: string): number | null {
 
 function previewWithPort(preview: string, port: number): string {
   return preview.replace(/--port\s+\d+/, `--port ${port}`)
-}
-
-function isConnectFailure(error: string): boolean {
-  return /没有运行 DeepSeek Harness|无法连接到/i.test(error)
-}
-
-function connectFailureHint(error: string): string {
-  if (isConnectFailure(error)) {
-    return '该端口没有检测到 DeepSeek Harness 服务，请在下方的启动设置中启动服务。'
-  }
-  return error
 }
 
 function hostFromUrl(url: string | null | undefined, fallback = '127.0.0.1'): string {
@@ -121,30 +108,51 @@ function portFromUrl(url: string | null | undefined, fallback = 3080): number {
   }
 }
 
-function sourceLabel(kind: string): string {
+function IdleDescription({ host, text }: { host: string; text: string }) {
+  const index = text.indexOf(host)
+  if (index < 0) {
+    return text
+  }
+  return (
+    <>
+      {text.slice(0, index)}
+      <code id="localHint" className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+        {host}
+      </code>
+      {text.slice(index + host.length)}
+    </>
+  )
+}
+
+function sourceKey(kind: string): string {
   switch (kind) {
     case 'reuse-local':
-      return '本机已运行的服务'
     case 'path-dsh':
-      return '系统已安装的 dsh'
     case 'pnpm-dlx':
-      return 'pnpm 本地缓存'
     case 'npx-cache':
-      return 'npm 本地缓存'
     case 'bundled':
-      return '应用内置运行时'
     case 'remote':
-      return '远程服务'
+    case 'none':
+      return `source.${kind}`
     default:
-      return '未连接'
+      return 'source.none'
   }
 }
 
 export function HostApp({ api }: HostAppProps) {
+  return (
+    <I18nProvider>
+      <HostAppInner api={api} />
+    </I18nProvider>
+  )
+}
+
+function HostAppInner({ api }: HostAppProps) {
+  const { t } = useTranslation()
   const [state, setState] = useState<ShellState | null>(null)
   const [selectedId, setSelectedId] = useState<PackageManagerId | null>(null)
   const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState('正在检测本机环境…')
+  const [status, setStatus] = useState(() => t('status.detecting'))
   const [statusError, setStatusError] = useState(false)
   const [log, setLog] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -227,18 +235,18 @@ export function HostApp({ api }: HostAppProps) {
     }
     const name = renameValue.trim()
     if (!name) {
-      setRenameError('名称不能为空')
+      setRenameError(t('rename.empty'))
       return
     }
     if (name.length > 20) {
-      setRenameError('名称最多 20 个字')
+      setRenameError(t('rename.tooLong'))
       return
     }
-    applyState(await api.updateInstance({ id: renaming.id, name, url: renaming.url }))
+    await applyState(await api.updateInstance({ id: renaming.id, name, url: renaming.url }))
     closeRenameDialog()
   }
 
-  function applyState(next: ShellState) {
+  async function applyState(next: ShellState) {
     const current = stateRef.current
     setPortDraft((draft) => {
       if (!current || draft === String(current.localPort)) {
@@ -269,11 +277,12 @@ export function HostApp({ api }: HostAppProps) {
     stateRef.current = next
     setState(next)
     setSelectedId((selected) => pickManager(next, selected))
+    await changeLanguage(resolveLocale(next.locale, navigator.language))
     if (next.starting) {
       if (!stayInSettingsWhileStartingRef.current) {
         closeSettingsPage()
       }
-      setStatus('正在启动 DeepSeek Harness，日志会实时显示在下方。')
+      setStatus(translate('status.startingWithLogs'))
       setStatusError(false)
       return
     }
@@ -288,31 +297,33 @@ export function HostApp({ api }: HostAppProps) {
       setSettingsOpen(true)
     }
     if (next.lastError) {
-      setStatus(next.lastError)
+      const message = formatHostError(next.lastError, translate)
+      setStatus(message)
       setStatusError(true)
-      if (isConnectFailure(next.lastError) && lastToastErrorRef.current !== next.lastError) {
-        lastToastErrorRef.current = next.lastError
-        showToast(connectFailureHint(next.lastError))
+      const toastKey = `${next.lastError.code}:${JSON.stringify(next.lastError.params ?? {})}`
+      if (isConnectFailure(next.lastError) && lastToastErrorRef.current !== toastKey) {
+        lastToastErrorRef.current = toastKey
+        showToast(translate('error.connectHint'))
       }
       return
     }
     lastToastErrorRef.current = null
     if (next.detected && next.url) {
-      setStatus('服务已在运行。更换启动命令后点保存，下次会用新命令拉起。')
+      setStatus(translate('status.running'))
       setStatusError(false)
       return
     }
     if (next.lastPackageManager) {
-      setStatus('当前没有运行中的服务。可在设置里重新启动。')
+      setStatus(translate('status.idleSaved'))
       setStatusError(false)
       return
     }
     if (next.managers.length) {
-      setStatus('请先选择启动命令并确认。确认前不会执行任何安装。')
+      setStatus(translate('status.chooseCommand'))
       setStatusError(false)
       return
     }
-    setStatus('未找到可用的包管理器。')
+    setStatus(translate('status.noManagers'))
     setStatusError(true)
   }
 
@@ -324,7 +335,7 @@ export function HostApp({ api }: HostAppProps) {
     setStatus(label)
     setStatusError(false)
     try {
-      applyState(await fn())
+      await applyState(await fn())
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
       setStatusError(true)
@@ -348,7 +359,7 @@ export function HostApp({ api }: HostAppProps) {
       setLog((current) => current + text)
     })
     const stopState = api.onState((next) => {
-      applyState(next)
+      void applyState(next)
     })
     const stopOpen = api.onOpenSettings(() => {
       settingsOpenRef.current = true
@@ -357,7 +368,7 @@ export function HostApp({ api }: HostAppProps) {
     const stopUpdates = api.onUpdatesResult((report) => {
       setUpdateReport(report)
     })
-    void api.getState().then(applyState).catch((error) => {
+    void api.getState().then((next) => applyState(next)).catch((error) => {
       setStatus(error instanceof Error ? error.message : String(error))
       setStatusError(true)
     })
@@ -421,7 +432,7 @@ export function HostApp({ api }: HostAppProps) {
   const showIdle = !settingsOpen && Boolean(state) && !connected && !starting
   const showStarting = !settingsOpen && starting
 
-  if (!state && statusError && status.includes('宿主接口')) {
+  if (!state && statusError && status === t('status.missingApi')) {
     return <p className="p-6 text-sm text-destructive">{status}</p>
   }
 
@@ -434,7 +445,7 @@ export function HostApp({ api }: HostAppProps) {
             type="button"
             role="tab"
             data-tab={SETTINGS_TAB_ID}
-            aria-label="设置"
+            aria-label={t('chrome.settingsAria')}
             aria-selected={settingsOpen}
             className={cn(
               'inline-flex h-8 items-center gap-2 rounded-lg border px-2.5 text-sm transition-colors',
@@ -445,7 +456,7 @@ export function HostApp({ api }: HostAppProps) {
             onClick={openSettingsPage}
           >
             <Settings className="size-3.5" aria-hidden="true" />
-            <span>设置</span>
+            <span>{t('common.settings')}</span>
           </button>
           {instances.map((item) => (
             <InstanceTab
@@ -471,8 +482,8 @@ export function HostApp({ api }: HostAppProps) {
           variant="ghost"
           size="icon"
           className="relative z-10 shrink-0 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
-          aria-label={`主题：${themeLabel(theme)}`}
-          title={`主题：${themeLabel(theme)}`}
+          aria-label={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
+          title={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
           onClick={() => {
             setTheme((current) => nextTheme(current))
           }}
@@ -499,11 +510,11 @@ export function HostApp({ api }: HostAppProps) {
             }}
           >
             <DialogHeader>
-              <DialogTitle>重命名</DialogTitle>
-              <DialogDescription>修改当前实例在顶栏中显示的名称。</DialogDescription>
+              <DialogTitle>{t('rename.title')}</DialogTitle>
+              <DialogDescription>{t('rename.description')}</DialogDescription>
             </DialogHeader>
             <div className="grid gap-2 py-4">
-              <Label htmlFor="instance-name">名称</Label>
+              <Label htmlFor="instance-name">{t('common.name')}</Label>
               <Input
                 id="instance-name"
                 value={renameValue}
@@ -520,9 +531,9 @@ export function HostApp({ api }: HostAppProps) {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={closeRenameDialog}>
-                取消
+                {t('common.cancel')}
               </Button>
-              <Button type="submit">确认</Button>
+              <Button type="submit">{t('common.confirm')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -532,40 +543,40 @@ export function HostApp({ api }: HostAppProps) {
         <main id="settings-page" className="min-h-0 flex-1 overflow-auto">
           <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-6 py-8">
             <div>
-              <h1 className="text-xl font-semibold tracking-tight">设置</h1>
-              <p className="mt-1 text-sm text-muted-foreground">管理本机 DeepSeek Harness 的连接与应用偏好。</p>
+              <h1 className="text-xl font-semibold tracking-tight">{t('settings.title')}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">{t('settings.subtitle')}</p>
             </div>
 
             <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="border-b px-5 py-4">
-                <h2 className="text-sm font-medium">连接</h2>
+                <h2 className="text-sm font-medium">{t('settings.connection')}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {connected ? '当前已连上 DeepSeek Harness。' : '还没有连上服务。填写地址后点连接。'}
+                  {connected ? t('settings.connectionOn') : t('settings.connectionOff')}
                 </p>
               </div>
               {connected ? (
                 <>
                   <div className="divide-y">
                     <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                      <span className="text-sm text-muted-foreground">状态</span>
-                      <span className="text-sm">已连接</span>
+                      <span className="text-sm text-muted-foreground">{t('common.status')}</span>
+                      <span className="text-sm">{t('settings.connected')}</span>
                     </div>
                     <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                      <span className="text-sm text-muted-foreground">名称</span>
+                      <span className="text-sm text-muted-foreground">{t('settings.name')}</span>
                       <span className="text-sm">{instance?.name ?? 'deepseek-harness'}</span>
                     </div>
                     <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                      <span className="text-sm text-muted-foreground">地址</span>
+                      <span className="text-sm text-muted-foreground">{t('settings.address')}</span>
                       <code className="font-mono text-sm">{state?.url}</code>
                     </div>
                     <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                      <span className="text-sm text-muted-foreground">运行时来源</span>
-                      <span className="text-sm">{sourceLabel(state?.sourceKind ?? 'none')}</span>
+                      <span className="text-sm text-muted-foreground">{t('settings.source')}</span>
+                      <span className="text-sm">{t(sourceKey(state?.sourceKind ?? 'none'))}</span>
                     </div>
                     {state?.lastError ? (
                       <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-start">
-                        <span className="text-sm text-muted-foreground">最近错误</span>
-                        <span className="text-sm text-destructive">{state.lastError}</span>
+                        <span className="text-sm text-muted-foreground">{t('settings.lastError')}</span>
+                        <span className="text-sm text-destructive">{formatHostError(state.lastError, t)}</span>
                       </div>
                     ) : null}
                   </div>
@@ -578,14 +589,14 @@ export function HostApp({ api }: HostAppProps) {
                       disabled={busy || starting || typeof api.disconnect !== 'function'}
                       onClick={() => {
                         if (typeof api.disconnect !== 'function') {
-                          setStatus('当前运行的是旧预加载脚本，请完全退出后重新执行 pnpm dev。')
+                          setStatus(t('status.stalePreload'))
                           setStatusError(true)
                           return
                         }
-                        void run('正在切换连接…', () => api.disconnect!())
+                        void run(t('status.switching'), () => api.disconnect!())
                       }}
                     >
-                      切换连接
+                      {t('settings.switchConnection')}
                     </Button>
                     <Button
                       id="detect"
@@ -594,7 +605,7 @@ export function HostApp({ api }: HostAppProps) {
                       size="sm"
                       disabled={busy || starting}
                       onClick={() => {
-                        void run('正在重新检测…', () =>
+                        void run(t('status.detectingAgain'), () =>
                           api.detect({
                             host: hostFromUrl(state?.url, connectHost),
                             port: portFromUrl(state?.url, parsedPort ?? state?.localPort ?? 3080),
@@ -602,7 +613,7 @@ export function HostApp({ api }: HostAppProps) {
                         )
                       }}
                     >
-                      重新检测
+                      {t('settings.detect')}
                     </Button>
                     <Button
                       id="stop-service"
@@ -612,14 +623,14 @@ export function HostApp({ api }: HostAppProps) {
                       disabled={busy || typeof api.stop !== 'function'}
                       onClick={() => {
                         if (typeof api.stop !== 'function') {
-                          setStatus('当前运行的是旧预加载脚本，请完全退出后重新执行 pnpm dev。')
+                          setStatus(t('status.stalePreload'))
                           setStatusError(true)
                           return
                         }
-                        void run('正在终止本机 DeepSeek Harness…', () => api.stop!())
+                        void run(t('status.stopping'), () => api.stop!())
                       }}
                     >
-                      终止服务
+                      {t('settings.stop')}
                     </Button>
                   </div>
                 </>
@@ -627,16 +638,16 @@ export function HostApp({ api }: HostAppProps) {
                 <>
                   <div className="divide-y">
                     <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                      <span className="text-sm text-muted-foreground">状态</span>
-                      <span className="text-sm">{starting ? '启动中' : '未连接'}</span>
+                      <span className="text-sm text-muted-foreground">{t('common.status')}</span>
+                      <span className="text-sm">{starting ? t('settings.starting') : t('settings.disconnected')}</span>
                     </div>
                     <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                      <span className="text-sm text-muted-foreground">地址</span>
+                      <span className="text-sm text-muted-foreground">{t('settings.address')}</span>
                       <div className="flex min-w-0 items-center justify-start gap-2">
                         <Input
                           id="connectHost"
                           type="text"
-                          aria-label="IP"
+                          aria-label={t('common.ip')}
                           placeholder="127.0.0.1"
                           value={connectHost}
                           className="w-40"
@@ -648,7 +659,7 @@ export function HostApp({ api }: HostAppProps) {
                           id="connectPort"
                           type="text"
                           inputMode="numeric"
-                          aria-label="连接端口"
+                          aria-label={t('settings.connectPort')}
                           placeholder="3080"
                           value={connectPort}
                           className="w-24"
@@ -668,16 +679,16 @@ export function HostApp({ api }: HostAppProps) {
                       disabled={connectDisabled}
                       onClick={() => {
                         if (!connectHost.trim() || parsedConnectPort === null) {
-                          setStatus('请输入有效的 IP 和 1–65535 端口')
+                          setStatus(t('error.invalidTarget'))
                           setStatusError(true)
                           return
                         }
-                        void run('正在重新检测…', () =>
+                        void run(t('status.detectingAgain'), () =>
                           api.detect({ host: connectHost.trim(), port: parsedConnectPort }),
                         )
                       }}
                     >
-                      重新检测
+                      {t('settings.detect')}
                     </Button>
                     <Button
                       id="connect"
@@ -686,16 +697,16 @@ export function HostApp({ api }: HostAppProps) {
                       disabled={connectDisabled}
                       onClick={() => {
                         if (!connectHost.trim() || parsedConnectPort === null) {
-                          setStatus('请输入有效的 IP 和 1–65535 端口')
+                          setStatus(t('error.invalidTarget'))
                           setStatusError(true)
                           return
                         }
-                        void run('正在连接…', () =>
+                        void run(t('status.connecting'), () =>
                           api.detect({ host: connectHost.trim(), port: parsedConnectPort }),
                         )
                       }}
                     >
-                      {busy ? '连接中…' : '连接'}
+                      {busy ? t('common.connecting') : t('common.connect')}
                     </Button>
                   </div>
                 </>
@@ -704,19 +715,15 @@ export function HostApp({ api }: HostAppProps) {
 
             <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="border-b px-5 py-4">
-                <h2 className="text-sm font-medium">启动 DeepSeek Harness</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  首次使用请选择本机已有的包管理器。确认后会写入配置。
-                  <br />
-                  打开下方「自动启动」后，下次打开应用才会用这条命令拉起{' '}
-                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">127.0.0.1:{port}</code>
-                  。
+                <h2 className="text-sm font-medium">{t('settings.launchTitle')}</h2>
+                <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">
+                  {t('settings.launchHint', { host: `127.0.0.1:${port}` })}
                 </p>
               </div>
               <div className="space-y-4 px-5 py-4">
                 <div className="grid gap-1 sm:grid-cols-[160px_1fr] sm:items-center">
                   <Label htmlFor="startPort" className="text-sm font-normal text-muted-foreground">
-                    启动端口
+                    {t('settings.startPort')}
                   </Label>
                   <Input
                     id="startPort"
@@ -731,7 +738,7 @@ export function HostApp({ api }: HostAppProps) {
                 </div>
                 {!state || state.managers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    没有在 PATH 里找到 pnpm、npx、yarn 或 bunx。请先安装其中一个。
+                    {t('settings.noManagersFound')}
                   </p>
                 ) : (
                   <RadioGroup
@@ -788,14 +795,14 @@ export function HostApp({ api }: HostAppProps) {
                     disabled={savePortDisabled}
                     onClick={() => {
                       if (parsedPort === null) {
-                        setStatus('端口必须是 1–65535 的整数')
+                        setStatus(t('error.invalidPort'))
                         setStatusError(true)
                         return
                       }
-                      void run('正在保存启动端口…', () => api.saveLocalPort({ localPort: parsedPort }))
+                      void run(t('status.savingPort'), () => api.saveLocalPort({ localPort: parsedPort }))
                     }}
                   >
-                    保存
+                    {t('common.save')}
                   </Button>
                 ) : null}
                 <Button
@@ -806,7 +813,7 @@ export function HostApp({ api }: HostAppProps) {
                   onClick={() => {
                     if (!selectedId || parsedPort === null) {
                       if (parsedPort === null) {
-                        setStatus('端口必须是 1–65535 的整数')
+                        setStatus(t('error.invalidPort'))
                         setStatusError(true)
                       }
                       return
@@ -814,28 +821,50 @@ export function HostApp({ api }: HostAppProps) {
                     stayInSettingsWhileStartingRef.current = true
                     stickLogToBottomRef.current = true
                     setLog('')
-                    void run('正在执行命令，启动日志会显示在下方…', () =>
+                    void run(t('status.installing'), () =>
                       api.install(selectedId, { localPort: parsedPort }),
                     )
                   }}
                 >
-                  {starting ? '启动中…' : '启动'}
+                  {starting ? t('common.starting') : t('common.start')}
                 </Button>
               </div>
             </section>
 
             <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="border-b px-5 py-4">
-                <h2 className="text-sm font-medium">通用</h2>
+                <h2 className="text-sm font-medium">{t('settings.general')}</h2>
               </div>
               <div className="divide-y">
                 <div className="flex items-center justify-between gap-6 px-5 py-4">
                   <div className="min-w-0">
+                    <Label htmlFor="locale" className="text-sm font-medium">
+                      {t('locale.label')}
+                    </Label>
+                    <p className="mt-1 text-sm text-muted-foreground">{t('locale.hint')}</p>
+                  </div>
+                  <select
+                    id="locale"
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    aria-label={t('locale.label')}
+                    value={state?.locale ?? 'system'}
+                    onChange={(event) => {
+                      const next = event.target.value as LocalePreference
+                      void api.saveHost({ locale: next })
+                    }}
+                  >
+                    <option value="system">{t('locale.system')}</option>
+                    <option value="zh-CN">{t('locale.zh-CN')}</option>
+                    <option value="en">{t('locale.en')}</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between gap-6 px-5 py-4">
+                  <div className="min-w-0">
                     <Label htmlFor="autoStart" className="text-sm font-medium">
-                      自动启动 DeepSeek Harness
+                      {t('settings.autoStart')}
                     </Label>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      打开应用后，若本机端口还没起来，就用已保存的命令拉起服务。默认关闭。
+                      {t('settings.autoStartHint')}
                     </p>
                   </div>
                   <Switch
@@ -849,9 +878,9 @@ export function HostApp({ api }: HostAppProps) {
                 <div className="flex items-center justify-between gap-6 px-5 py-4">
                   <div className="min-w-0">
                     <Label htmlFor="openAtLogin" className="text-sm font-medium">
-                      登录时自动启动
+                      {t('settings.openAtLogin')}
                     </Label>
-                    <p className="mt-1 text-sm text-muted-foreground">开机后自动启动本应用，并在后台保持运行。</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{t('settings.openAtLoginHint')}</p>
                   </div>
                   <Switch
                     id="openAtLogin"
@@ -866,17 +895,29 @@ export function HostApp({ api }: HostAppProps) {
 
             <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="border-b px-5 py-4">
-                <h2 className="text-sm font-medium">更新</h2>
-                <p className="mt-1 text-sm text-muted-foreground">只检查版本，不会自动安装。</p>
+                <h2 className="text-sm font-medium">{t('settings.updates')}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t('settings.updatesHint')}</p>
               </div>
               <div className="divide-y">
                 <div className="flex items-center justify-between gap-6 px-5 py-4">
                   <p className="text-sm font-medium">dsh-desktop</p>
                   <div className="flex min-w-0 items-center gap-3">
                     <p id="appUpdateStatus" className="text-right text-sm text-muted-foreground">
-                      <span>{versionLabel(updateReport?.app ?? null, state?.appVersion ?? null)}</span>
-                      {versionHint(updateReport?.app ?? null) ? (
-                        <span className="mt-0.5 block text-xs">{versionHint(updateReport?.app ?? null)}</span>
+                      <span>
+                        {versionLabel(updateReport?.app ?? null, state?.appVersion ?? null, t('updates.unknown'))}
+                      </span>
+                      {versionHint(updateReport?.app ?? null, {
+                        latestFailed: t('updates.latestFailed'),
+                        available: (latest) => t('updates.available', { latest }),
+                        current: t('updates.current'),
+                      }) ? (
+                        <span className="mt-0.5 block text-xs">
+                          {versionHint(updateReport?.app ?? null, {
+                            latestFailed: t('updates.latestFailed'),
+                            available: (latest) => t('updates.available', { latest }),
+                            current: t('updates.current'),
+                          })}
+                        </span>
                       ) : null}
                     </p>
                     {updateReport?.app?.updateAvailable ? (
@@ -888,7 +929,7 @@ export function HostApp({ api }: HostAppProps) {
                           void refreshUpdates('app')
                         }}
                       >
-                        更新
+                        {t('common.update')}
                       </Button>
                     ) : null}
                   </div>
@@ -897,9 +938,21 @@ export function HostApp({ api }: HostAppProps) {
                   <p className="text-sm font-medium">DeepSeek Harness</p>
                   <div className="flex min-w-0 items-center gap-3">
                     <p id="dshUpdateStatus" className="text-right text-sm text-muted-foreground">
-                      <span>{versionLabel(updateReport?.dsh ?? null, state?.dshVersion ?? null)}</span>
-                      {versionHint(updateReport?.dsh ?? null) ? (
-                        <span className="mt-0.5 block text-xs">{versionHint(updateReport?.dsh ?? null)}</span>
+                      <span>
+                        {versionLabel(updateReport?.dsh ?? null, state?.dshVersion ?? null, t('updates.unknown'))}
+                      </span>
+                      {versionHint(updateReport?.dsh ?? null, {
+                        latestFailed: t('updates.latestFailed'),
+                        available: (latest) => t('updates.available', { latest }),
+                        current: t('updates.current'),
+                      }) ? (
+                        <span className="mt-0.5 block text-xs">
+                          {versionHint(updateReport?.dsh ?? null, {
+                            latestFailed: t('updates.latestFailed'),
+                            available: (latest) => t('updates.available', { latest }),
+                            current: t('updates.current'),
+                          })}
+                        </span>
                       ) : null}
                     </p>
                     {updateReport?.dsh?.updateAvailable ? (
@@ -911,7 +964,7 @@ export function HostApp({ api }: HostAppProps) {
                           void refreshUpdates('dsh')
                         }}
                       >
-                        更新
+                        {t('common.update')}
                       </Button>
                     ) : null}
                   </div>
@@ -928,20 +981,20 @@ export function HostApp({ api }: HostAppProps) {
                     void refreshUpdates('both')
                   }}
                 >
-                  {checkingApp || checkingDsh ? '检查中…' : '检查更新'}
+                  {checkingApp || checkingDsh ? t('settings.checking') : t('settings.checkUpdates')}
                 </Button>
               </div>
             </section>
 
             <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="border-b px-5 py-4">
-                <h2 className="text-sm font-medium">数据</h2>
-                <p className="mt-1 text-sm text-muted-foreground">日志与本地配置保存在应用数据目录中。</p>
+                <h2 className="text-sm font-medium">{t('settings.data')}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t('settings.dataHint')}</p>
               </div>
               <div className="flex items-center justify-between gap-6 px-5 py-4">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">应用数据</p>
-                  <p className="mt-1 text-sm text-muted-foreground">包含 settings.json、shell.log 和 web.log。</p>
+                  <p className="text-sm font-medium">{t('settings.appData')}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{t('settings.appDataHint')}</p>
                 </div>
                 <Button
                   id="openUserData"
@@ -952,7 +1005,7 @@ export function HostApp({ api }: HostAppProps) {
                     void api.openUserData()
                   }}
                 >
-                  打开目录
+                  {t('settings.openDirectory')}
                 </Button>
               </div>
             </section>
@@ -971,8 +1024,8 @@ export function HostApp({ api }: HostAppProps) {
         <main id="starting" className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
           <LoaderCircle className="size-8 animate-spin text-primary" aria-hidden="true" />
           <div className="space-y-1 text-center">
-            <p className="text-sm font-medium">正在启动 DeepSeek Harness</p>
-            <p className="text-sm text-muted-foreground">等待 127.0.0.1:{port} 就绪后会自动打开官方页面。</p>
+            <p className="text-sm font-medium">{t('starting.title')}</p>
+            <p className="text-sm text-muted-foreground">{t('starting.description', { port })}</p>
           </div>
         </main>
       ) : null}
@@ -981,10 +1034,9 @@ export function HostApp({ api }: HostAppProps) {
         <main id="setup" className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center px-6">
           <Card className="w-full">
             <CardHeader>
-              <CardTitle className="text-xl">当前没有启动服务</CardTitle>
+              <CardTitle className="text-xl">{t('idle.title')}</CardTitle>
               <CardDescription>
-                本机 <code id="localHint" className="rounded bg-muted px-1 py-0.5 font-mono text-xs">127.0.0.1:{port}</code>{' '}
-                现在不是官方 Web 页面。首次使用请先去设置里选择启动命令并确认。
+                <IdleDescription host={`127.0.0.1:${port}`} text={t('idle.description', { host: `127.0.0.1:${port}` })} />
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -996,7 +1048,7 @@ export function HostApp({ api }: HostAppProps) {
                 type="button"
                 onClick={openSettingsPage}
               >
-                前往设置
+                {t('idle.openSettings')}
               </Button>
             </CardFooter>
           </Card>

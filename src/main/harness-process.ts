@@ -1,4 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { CodedError } from '../i18n/index.js'
 
 const LOOPBACK_URL = /https?:\/\/(?:127\.0\.0\.1|localhost):\d+\/?/i
 const INTERACTIVE_PROMPT = /choose which packages to build|approve(?:-| )builds|\? choose |press (?:enter|space)|use (?:arrow|the arrow) keys/i
@@ -163,12 +164,9 @@ export async function startHarnessWeb(opts: {
     }
 
     const timer = setTimeout(() => {
+      const url = parseHarnessWebUrl(output)
       void finishError(
-        new Error(
-          parseHarnessWebUrl(output)
-            ? `dsh web at ${parseHarnessWebUrl(output)} did not become ready`
-            : 'dsh web did not print a loopback url',
-        ),
+        url ? new CodedError('error.notReady', { url }) : new CodedError('error.noLoopbackUrl'),
       )
     }, timeoutMs)
 
@@ -177,11 +175,7 @@ export async function startHarnessWeb(opts: {
       output += text
       opts.onOutput?.(text)
       if (looksLikeInteractivePrompt(output)) {
-        void finishError(
-          new Error(
-            '启动命令在等待交互确认（例如 pnpm 选择需要 build 的包）。桌面端无法回答这个提示，已停止等待。请改用设置里的 npx，或升级 pnpm 后重试。',
-          ),
-        )
+        void finishError(new CodedError('error.interactivePrompt'))
         return
       }
       const url = parseHarnessWebUrl(output)
