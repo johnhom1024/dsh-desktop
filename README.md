@@ -55,24 +55,28 @@ DeepSeek Harness is a web app you usually start with `dsh web` or `pnpm dlx`. Th
 
 ## Install
 
-Requires **macOS on Apple Silicon**. Download the unsigned DMG from
+Requires **macOS**. Download the unsigned Apple Silicon or Intel DMG from
 [Releases](https://github.com/johnhom1024/dsh-desktop/releases).
 
-Pushing a `v*` tag (for example `v0.1.0`) runs GitHub Actions: it typechecks,
-tests, builds `dsh-desktop-<version>-arm64.dmg`, and attaches that file plus
-`SHA256SUMS.txt` to the GitHub Release.
+Pushing a `v*` tag (for example `v0.1.0`) runs two GitHub Actions jobs: one
+builds `dsh-desktop-<version>-arm64.dmg`, the other builds
+`dsh-desktop-<version>-x64.dmg`. Both files plus `SHA256SUMS.txt` are attached
+to the GitHub Release, each with its own checksum file.
 
-To package locally:
+To package locally (Apple Silicon by default, so everyday `pnpm dist:mac` stays
+the same):
 
 ```bash
 pnpm install
-pnpm dist:mac
+pnpm dist:mac        # Apple Silicon
+pnpm dist:mac:intel  # Intel
 ```
 
 Output:
 
 - `release/dsh-desktop-0.1.0-arm64.dmg`
-- `release/SHA256SUMS.txt`
+- `release/dsh-desktop-0.1.0-x64.dmg`
+- `release/SHA256SUMS-arm64.txt` / `release/SHA256SUMS-x64.txt`
 
 macOS will warn that the app is unsigned. Open it from Finder, or right-click → **Open**.
 
@@ -154,7 +158,7 @@ Logs: `shell.log` for host events, `web.log` for start-command output.
 - Not a translator for the official Web UI
 - Not a signed / notarized Mac App Store build
 - Not an auto-updater (`electron-updater` is intentionally unused)
-- Not a Windows / Linux / Intel Mac package yet
+- Not a Windows / Linux package yet
 
 ## License
 

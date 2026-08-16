@@ -180,20 +180,22 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 
 ---
 
-## 12. 打包（macOS arm64 DMG）
+## 12. 打包（macOS DMG）
 
 ```bash
-pnpm dist:mac
+pnpm dist:mac        # Apple Silicon arm64
+pnpm dist:mac:intel  # Intel x64
 ```
 
-流程：`build:main`（`tsc` + 拷 renderer HTML）→ 生成 `build/icon.png` → `electron-builder --mac dmg --arm64` → 写 `release/SHA256SUMS.txt`。
+流程：`build:main`（`tsc` + 拷 renderer HTML）→ 生成 `build/icon.png` → `electron-builder --mac dmg --arm64` 或 `--x64` → 写对应架构的 `SHA256SUMS-*.txt`。本地默认脚本仍只打 arm64，避免日常开发多打一份 Intel 包。
 
-GitHub 上推 `v*` tag 会跑 `.github/workflows/release.yml`：在 `macos-15` 上执行同样的 `pnpm dist:mac`，再把 DMG 和 `SHA256SUMS.txt` 挂到该 tag 的 Release。不签名、不公证。`package.json` 的 `version` 应和 tag 一致（`v0.1.0` → `0.1.0`）。
+GitHub 上推 `v*` tag 会跑 `.github/workflows/release.yml` 的两个 job：一个 `pnpm dist:mac`，一个 `pnpm dist:mac:intel`，各自把对应 DMG 和校验和挂到该 tag 的 Release。不签名、不公证。`package.json` 的 `version` 应和 tag 一致（`v0.1.0` → `0.1.0`）。
 
 产物：
 
 - `release/dsh-desktop-0.1.0-arm64.dmg`（未签名、未公证，约 100MB）
-- `release/SHA256SUMS.txt`
+- `release/dsh-desktop-0.1.0-x64.dmg`
+- `release/SHA256SUMS-arm64.txt` / `release/SHA256SUMS-x64.txt`
 
 说明：
 
@@ -228,7 +230,7 @@ Electron 二进制不走 npm registry，项目 `.npmrc` 已设 `electron_mirror=
 - Apple Developer ID 签名 / 公证
 - `electron-updater` 自动下载安装
 - 安装包内置整份 `@deepseek-ai/dsh`
-- Intel Mac / Windows / Linux 安装包
+- Windows / Linux 安装包
 - 扫局域网 NAS
 - 改官方 UI、主题、插件市场
 

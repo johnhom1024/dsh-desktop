@@ -13,7 +13,8 @@
     "build:renderer": "vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
     "test": "tsx --test src/main/*.test.ts src/i18n/*.test.ts && vitest run",
-    "dist:mac": "pnpm run build:main && pnpm run build:renderer && node scripts/write-icon.mjs && pnpm exec electron-builder --mac dmg --arm64 --publish never && node scripts/sha256-release.mjs release"
+    "dist:mac": "pnpm run build:main && pnpm run build:renderer && node scripts/write-icon.mjs && pnpm exec electron-builder --mac dmg --arm64 --publish never && node scripts/sha256-release.mjs release arm64",
+    "dist:mac:intel": "pnpm run build:main && pnpm run build:renderer && node scripts/write-icon.mjs && pnpm exec electron-builder --mac dmg --x64 --publish never && node scripts/sha256-release.mjs release x64"
   },
   "engines": {
     "node": ">=22.15.0"

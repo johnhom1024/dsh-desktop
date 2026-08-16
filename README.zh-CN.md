@@ -55,23 +55,26 @@ DeepSeek Harness 一般是在终端里跑 `dsh web` 或 `pnpm dlx`。能用，�
 
 ## 安装
 
-目前只打 **Apple Silicon macOS** 包。未签名 DMG 从
+需要 **macOS**。未签名的 Apple Silicon / Intel DMG 从
 [Releases](https://github.com/johnhom1024/dsh-desktop/releases) 下载。
 
-推一个 `v*` tag（例如 `v0.1.0`）就会跑 GitHub Actions：先 typecheck / 测试，再打
-`dsh-desktop-<version>-arm64.dmg`，连同 `SHA256SUMS.txt` 挂到这个 tag 的 Release。
+推一个 `v*` tag（例如 `v0.1.0`）会跑两个 GitHub Actions job：一个打
+`dsh-desktop-<version>-arm64.dmg`，一个打 `dsh-desktop-<version>-x64.dmg`，
+连同各自的校验和文件挂到这个 tag 的 Release。
 
-本地打包：
+本地打包（默认仍是 Apple Silicon，日常 `pnpm dist:mac` 不变）：
 
 ```bash
 pnpm install
-pnpm dist:mac
+pnpm dist:mac        # Apple Silicon
+pnpm dist:mac:intel  # Intel
 ```
 
 产物：
 
 - `release/dsh-desktop-0.1.0-arm64.dmg`
-- `release/SHA256SUMS.txt`
+- `release/dsh-desktop-0.1.0-x64.dmg`
+- `release/SHA256SUMS-arm64.txt` / `release/SHA256SUMS-x64.txt`
 
 打开时系统会提示未签名。在访达里右键 → **打开** 即可。
 
@@ -153,7 +156,7 @@ pnpm dev
 - 不翻译官方 Web UI
 - 不做签名 / 公证 / Mac App Store
 - 不做 `electron-updater` 自动下载安装
-- 暂时没有 Windows / Linux / Intel Mac 安装包
+- 暂时没有 Windows / Linux 安装包
 
 ## 许可证
 
