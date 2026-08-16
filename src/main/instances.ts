@@ -50,6 +50,32 @@ function localId(url: string): string {
   return `local-${port}`
 }
 
+export function setLocalPort(settings: Settings, port: number): Settings | null {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return null
+  }
+  const index = settings.instances.findIndex((item) => item.kind === 'local')
+  const nextItem = defaultLocalInstance(port)
+  if (index === -1) {
+    return {
+      ...settings,
+      instances: [...settings.instances, nextItem],
+      activeInstanceId: settings.activeInstanceId || nextItem.id,
+    }
+  }
+  const current = settings.instances[index]!
+  const renamed = { ...nextItem, name: current.name }
+  if (current.id === renamed.id && current.url === renamed.url) {
+    return settings
+  }
+  const instances = settings.instances.map((item, i) => (i === index ? renamed : item))
+  return {
+    ...settings,
+    instances,
+    activeInstanceId: settings.activeInstanceId === current.id ? renamed.id : settings.activeInstanceId,
+  }
+}
+
 export function selectInstance(settings: Settings, id: string): Settings | null {
   if (!settings.instances.some((item) => item.id === id)) {
     return null
@@ -57,9 +83,11 @@ export function selectInstance(settings: Settings, id: string): Settings | null 
   return { ...settings, activeInstanceId: id }
 }
 
+export const INSTANCE_NAME_MAX_LENGTH = 20
+
 export function renameInstance(settings: Settings, id: string, name: string): Settings | null {
   const trimmed = name.trim()
-  if (!trimmed) {
+  if (!trimmed || trimmed.length > INSTANCE_NAME_MAX_LENGTH) {
     return null
   }
   const index = settings.instances.findIndex((item) => item.id === id)

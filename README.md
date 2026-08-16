@@ -14,7 +14,7 @@ Remote tabs only probe their saved `http(s)` URL. A down remote never falls back
 
 The host chrome is a Vite + React page styled with Tailwind CSS v4 and shadcn/ui. The tab bar currently has one local instance plus a Settings tab. Official UI is a `WebContentsView` below the 44px tab bar, so host HTML cannot cover it with `z-index`. Full-page host UI must hide that view; menus that drop below the tab bar must use a native Electron menu. See [docs/host-overlays.md](docs/host-overlays.md). Multi-instance tabs are deferred. `pnpm dev` starts Vite on `127.0.0.1:5173` then Electron.
 
-In development, `Cmd+R` reloads the **host** page (not the official DSH view). `Shift+Cmd+R` still reconnects. `Cmd+Option+I` / `F12` toggles DevTools for the focused page (host chrome or the official view). Renderer CSS/React edits hot-reload through Vite; adding a new dependency or changing `src/main` needs a restart of `pnpm dev`.
+`Cmd+R` reloads the official DSH view, not the host chrome. The instance tab menu also has **刷新**. `Cmd+Option+I` / `F12` toggles DevTools for the focused page (host chrome or the official view). Renderer CSS/React edits hot-reload through Vite; adding a new dependency or changing `src/main` needs a restart of `pnpm dev`.
 
 Packaged launches from Finder often miss Homebrew / pnpm. The host prepends `/opt/homebrew/bin`, `/usr/local/bin`, and the user's pnpm homes, and also reads `export PATH=` lines from `~/.zprofile` / `~/.zshrc` without executing those files.
 

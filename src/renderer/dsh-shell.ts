@@ -17,15 +17,18 @@ export type ShellState = {
   starting: boolean
   settingsOpen: boolean
   openAtLogin: boolean
+  autoStart: boolean
   appVersion: string
   dshVersion: string | null
 }
 
 export type DshShellApi = {
   getState: () => Promise<ShellState>
-  detect: () => Promise<ShellState>
-  install: (id: PackageManagerId) => Promise<ShellState>
+  detect: (input?: { host?: string; port?: number; localPort?: number }) => Promise<ShellState>
+  install: (id: PackageManagerId, input?: { localPort?: number }) => Promise<ShellState>
+  saveLocalPort: (input: { localPort: number }) => Promise<ShellState>
   stop?: () => Promise<ShellState>
+  disconnect?: () => Promise<ShellState>
   selectInstance: (id: string) => Promise<ShellState>
   addInstance: (input: { name: string; kind: 'local' | 'remote'; url: string }) => Promise<ShellState>
   updateInstance: (input: { id: string; name: string; url: string }) => Promise<ShellState>
@@ -34,9 +37,9 @@ export type DshShellApi = {
   closeSettings: () => Promise<void>
   acquireOverlay: () => Promise<void>
   releaseOverlay: () => Promise<void>
-  popupInstanceMenu: (input: { instanceId: string }) => Promise<'rename' | null>
-  saveHost: (input: { openAtLogin: boolean }) => Promise<boolean>
-  checkUpdates: () => Promise<UpdateReport>
+  popupInstanceMenu: (input: { instanceId: string }) => Promise<'rename' | 'reload' | 'open-external' | null>
+  saveHost: (input: { openAtLogin?: boolean; autoStart?: boolean }) => Promise<boolean>
+  checkUpdates: (target?: 'app' | 'dsh' | 'both') => Promise<UpdateReport>
   openUserData: () => Promise<void>
   setTheme: (mode: 'light' | 'dark' | 'system') => Promise<void>
   onInstallLog: (listener: (text: string) => void) => () => void

@@ -58,6 +58,24 @@ test('checkUpdates stays quiet when latest cannot be fetched', async () => {
   equal(report.dsh.updateAvailable, false)
 })
 
+test('checkUpdates can inspect only the dsh package', async () => {
+  const fetched: string[] = []
+  const report = await checkUpdates({
+    appCurrent: '0.1.0',
+    dshCurrent: '0.1.0-rc.6',
+    target: 'dsh',
+    fetchLatest: async (name) => {
+      fetched.push(name)
+      return name === '@deepseek-ai/dsh' ? '0.1.0-rc.8' : '9.9.9'
+    },
+  })
+
+  deepEqual(fetched, ['@deepseek-ai/dsh'])
+  equal(report.app.latest, undefined)
+  equal(report.dsh.latest, '0.1.0-rc.8')
+  equal(report.dsh.updateAvailable, true)
+})
+
 test('checkUpdates can take a GitHub tag as the app latest version', async () => {
   const report = await checkUpdates({
     appCurrent: '0.1.0',

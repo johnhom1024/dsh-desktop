@@ -2,9 +2,11 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('dshShell', {
   getState: () => ipcRenderer.invoke('shellGetState'),
-  detect: () => ipcRenderer.invoke('shellDetect'),
-  install: (id) => ipcRenderer.invoke('shellInstall', id),
+  detect: (input) => ipcRenderer.invoke('shellDetect', input),
+  install: (id, input) => ipcRenderer.invoke('shellInstall', id, input),
+  saveLocalPort: (input) => ipcRenderer.invoke('shellSaveLocalPort', input),
   stop: () => ipcRenderer.invoke('shellStop'),
+  disconnect: () => ipcRenderer.invoke('shellDisconnect'),
   selectInstance: (id) => ipcRenderer.invoke('shellSelectInstance', id),
   addInstance: (input) => ipcRenderer.invoke('shellAddInstance', input),
   updateInstance: (input) => ipcRenderer.invoke('shellUpdateInstance', input),
@@ -15,7 +17,7 @@ contextBridge.exposeInMainWorld('dshShell', {
   releaseOverlay: () => ipcRenderer.invoke('shellReleaseOverlay'),
   popupInstanceMenu: (input) => ipcRenderer.invoke('shellPopupInstanceMenu', input),
   saveHost: (input) => ipcRenderer.invoke('shellSaveHost', input),
-  checkUpdates: () => ipcRenderer.invoke('settingsCheckUpdates'),
+  checkUpdates: (target) => ipcRenderer.invoke('settingsCheckUpdates', target),
   openUserData: () => ipcRenderer.invoke('shellOpenUserData'),
   setTheme: (mode) => ipcRenderer.invoke('shellSetTheme', mode),
   onInstallLog: (listener) => {

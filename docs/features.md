@@ -15,7 +15,7 @@
 - 独立仓库，不 fork 官方仓
 - 渲染进程：`nodeIntegration: false`、`contextIsolation: true`、`sandbox: true`
 - 外链走系统浏览器（`openExternal`），不在壳里打开任意站点
-- 只有用户在设置里点「确认并启动」后才会执行安装 / 启动命令；之后会把所选包管理器写入配置
+- 只有用户在设置里点「启动」后才会执行安装 / 启动命令；之后会把所选包管理器写入配置
 
 ---
 
@@ -24,9 +24,9 @@
 本机 tab 启动时只做两件事：
 
 1. 探测已保存的本机端口 `http://127.0.0.1:<localPort>`（默认 **3080**），确认是官方 DeepSeek Harness 页就直接复用
-2. 若 3080 没起来，且设置里已保存过启动命令（`lastPackageManager`），才用这条命令拉起 `dsh web --port 3080`
+2. 若端口没起来，且设置里打开了 **自动启动 DeepSeek Harness**、并已保存过启动命令（`lastPackageManager`），才用这条命令拉起 `dsh web --port <localPort>`
 
-没保存过启动命令时**不会**再去扫 PATH 上的 `dsh`、`pnpm dlx` 缓存、npx 缓存或内置包并自动 spawn。这就是以前打开引导页后「我没点确认也开始跑命令」的原因。
+自动启动默认关闭。没保存过启动命令时**不会**再去扫 PATH 上的 `dsh`、`pnpm dlx` 缓存、npx 缓存或内置包并自动 spawn。这就是以前打开引导页后「我没点确认也开始跑命令」的原因。
 
 远程 tab 只用保存的远程 URL；不可达时**不会**改去拉本机进程。
 
@@ -36,18 +36,24 @@
 
 ## 3. 首次使用与设置里的启动
 
-主窗口永远保留 44px 宿主顶栏。当前先做单实例：左边「设置」tab，右边本机实例 tab。官方 Web 用 `WebContentsView` 贴在顶栏下面。凡是会画出顶栏的宿主 UI（设置页、重命名弹窗、宿主 DevTools 检查）必须先摘掉官方视图；tab 三点菜单用系统原生 `Menu.popup`，不要用 HTML 下拉。详见 [host-overlays.md](host-overlays.md)。多实例（远程 tab / 加号）先关掉，以后再加。
+主窗口永远保留 44px 宿主顶栏。当前先做单实例：左边「设置」tab，右边本机实例 tab。官方 Web 用 `WebContentsView` 贴在顶栏下面。凡是会画出顶栏的宿主 UI（设置页、重命名弹窗、宿主 DevTools 检查）必须先摘掉官方视图；tab 三点菜单用系统原生 `Menu.popup`，不要用 HTML 下拉。菜单项左侧用系统图标：「重命名」、「刷新」和「浏览器打开」。详见 [host-overlays.md](host-overlays.md)。多实例（远程 tab / 加号）先关掉，以后再加。
 
 没检测到官方 Web 时，本机 tab 显示空状态：「当前没有启动服务，首次使用请先去设置里设置」。不会在这个容器里列出安装命令，也不会自动执行。
 
 设置页提供启动选项：
 
 - 列出 PATH 里已有的包管理器（**pnpm 优先**，然后 npx / yarn / bunx）
-- 选一个后点 **确认并启动** 才执行命令，并写入 `lastPackageManager`
+- 连接卡片按状态展示：未连接只显示状态、IP、端口和「连接」；已连接再显示地址、来源和「终止服务」
+- 启动区只改启动端口；命令预览里的 `--port` 跟着变
+- 改过启动端口后会出现 **保存**，只写入端口，不启动服务
+- 选一个后点 **启动** 才执行命令，并写入 `lastPackageManager` 和启动端口
 - 确认后先留在设置页，实时显示启动日志；子进程打印 loopback URL 且端口就绪后再切到官方页
-- 应用自己按已保存命令后台拉起时，本机 tab 显示启动中等待动画
+- 点 **连接** 会按输入的 IP / 端口探测，不会自动 spawn；本机地址会写回 `localPort`
+- **切换连接** 只断开当前视图，不终止端口上的服务，方便改地址后再连
+- **重新检测** 放在连接卡片，用来刷新当前连接状态；启动卡片只负责启动
+- 只有打开「自动启动 DeepSeek Harness」后，应用启动时才会按已保存命令后台拉起；此时本机 tab 显示启动中等待动画
 
-确认后实际执行的命令（固定端口，不再用 `--port 0`）：
+确认后实际执行的命令（端口来自设置，不再用 `--port 0`）：
 
 | 检测到 | 命令 |
 | --- | --- |
@@ -69,7 +75,8 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 - **单实例**：全机只跑一份。再点图标不会再开一个 Electron / 托盘 / `dsh web`，只把已有窗口拉到前台（最小化会先还原）
 - 应用菜单（连上官方页之后也在）：
   - **设置…** `Cmd+,`
-  - **重新检测** `Cmd+R`（开发模式下 `Cmd+R` 重载宿主页，`Shift+Cmd+R` 才是重新检测）
+  - **刷新** `Cmd+R`：只刷新当前 DSH Web 页面，不重载宿主顶栏
+  - **重新检测**（菜单 / 托盘）
   - **开发者工具** `Cmd+Option+I` / `Cmd+Option+J` / `F12`（Windows/Linux 为 `Ctrl+Shift+I` / `Ctrl+Shift+J`）
   - **检测更新…**
 - 官方 `WebContentsView` 获得焦点时，快捷键仍由主进程拦截，不会变成只刷新内部网页。开发者工具打开的是**当前焦点页**：点在官方 UI 上就查官方页，点在顶栏就查宿主。检查宿主元素时会暂时摘掉官方视图，否则原生层会盖住高亮。
@@ -88,6 +95,7 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 | `localPort` | 1–65535，默认 3080。本机 tab 先探测这个端口 |
 | `remoteUrl` | 仅 `http:` / `https:` |
 | `openAtLogin` | 登录自启，默认关 |
+| `autoStart` | 打开应用后是否自动拉起本机 `dsh web`，默认关 |
 | `lastPackageManager` | 上次在设置里确认过的启动命令（pnpm / npm / yarn / bun） |
 | `windowBounds` | 主窗口位置和大小 |
 
@@ -103,6 +111,7 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 
 ## 6. 登录自启
 
+- 设置页开关「自动启动 DeepSeek Harness」默认关；打开后，应用启动时才会按已保存命令拉起本机服务
 - 设置页开关「登录时自动启动」
 - 仅 **打包后的 `.app` / DMG** 会调用 `app.setLoginItemSettings({ openAtLogin, openAsHidden: true })`
 - `pnpm dev` **不会**写登录项，避免把仓库里的 Electron 开发进程注册进去
@@ -117,10 +126,10 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 
 | 比较对象 | 数据来源 |
 | --- | --- |
-| `@deepseek-ai/dsh` | npm `latest`，与本机缓存 / 内置版本比（含 rc） |
+| `@deepseek-ai/dsh` | npm `latest`，与 PATH / pnpm dlx 缓存 / npx 缓存 / 已连接页面里读到的当前版本比（含 rc） |
 | `dsh-desktop` 壳本身 | 仅当环境变量 `DSH_DESKTOP_GITHUB_REPO=owner/repo` 有值时，查该仓库 latest release tag |
 
-`dsh-desktop` 没发到 npm，未设置上述变量时只显示当前应用版本，不会误报有新包。拉不到 latest 时 `updateAvailable` 为 false。不做 `electron-updater` 自动下载。
+设置页每行左边是项目名，右边是当前版本。区块右下角一个「检查更新」会同时查两项。发现新版本时，对应行右侧再出现「更新」按钮（当前仍只复查版本，不自动安装）。`dsh-desktop` 没发到 npm，未设置上述变量时只显示当前应用版本，不会误报有新包。拉不到 latest 时 `updateAvailable` 为 false。不做 `electron-updater` 自动下载。
 
 ---
 

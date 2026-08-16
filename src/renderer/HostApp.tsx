@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
+import { Toaster, type ToastItem } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { InstanceTab } from './InstanceTab'
 import type { DshShellApi, Instance, PackageManagerId, ShellState, UpdateReport, VersionCheck } from './dsh-shell'
@@ -57,21 +58,67 @@ function managerLabel(id: string | null | undefined): string {
   }
 }
 
-function versionStatus(check: VersionCheck | null, fallbackCurrent: string | null): string {
-  const current = check?.current || fallbackCurrent
-  if (!current) {
-    return '当前版本未知'
-  }
+function versionLabel(check: VersionCheck | null, fallbackCurrent: string | null): string {
+  return check?.current || fallbackCurrent || '未知'
+}
+
+function versionHint(check: VersionCheck | null): string | null {
   if (!check || check.latest === undefined) {
-    return `当前版本 ${current}`
+    return null
   }
   if (!check.latest) {
-    return `当前版本 ${current} · 未能获取最新版本`
+    return '未能获取最新版本'
   }
   if (check.updateAvailable) {
-    return `当前版本 ${current} · 最新 ${check.latest}`
+    return `可更新至 ${check.latest}`
   }
-  return `当前版本 ${current} · 已是最新`
+  return '已是最新'
+}
+
+function parsePortDraft(value: string): number | null {
+  if (!/^\d+$/.test(value.trim())) {
+    return null
+  }
+  const port = Number(value)
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null
+}
+
+function previewWithPort(preview: string, port: number): string {
+  return preview.replace(/--port\s+\d+/, `--port ${port}`)
+}
+
+function isConnectFailure(error: string): boolean {
+  return /没有运行 DeepSeek Harness|无法连接到/i.test(error)
+}
+
+function connectFailureHint(error: string): string {
+  if (isConnectFailure(error)) {
+    return '该端口没有检测到 DeepSeek Harness 服务，请在下方的启动设置中启动服务。'
+  }
+  return error
+}
+
+function hostFromUrl(url: string | null | undefined, fallback = '127.0.0.1'): string {
+  if (!url) {
+    return fallback
+  }
+  try {
+    return new URL(url).hostname || fallback
+  } catch {
+    return fallback
+  }
+}
+
+function portFromUrl(url: string | null | undefined, fallback = 3080): number {
+  if (!url) {
+    return fallback
+  }
+  try {
+    const port = Number(new URL(url).port)
+    return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback
+  } catch {
+    return fallback
+  }
 }
 
 function sourceLabel(kind: string): string {
@@ -110,6 +157,23 @@ export function HostApp({ api }: HostAppProps) {
   const [renaming, setRenaming] = useState<Instance | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameError, setRenameError] = useState('')
+  const [portDraft, setPortDraft] = useState('3080')
+  const [connectHost, setConnectHost] = useState('127.0.0.1')
+  const [connectPort, setConnectPort] = useState('3080')
+  const [toasts, setToasts] = useState<ToastItem[]>([])
+  const toastIdRef = useRef(0)
+  const lastToastErrorRef = useRef<string | null>(null)
+  const stateRef = useRef<ShellState | null>(null)
+
+  function showToast(description: string, title?: string) {
+    toastIdRef.current += 1
+    const id = toastIdRef.current
+    setToasts((current) => [...current, title ? { id, title, description } : { id, description }])
+  }
+
+  function dismissToast(id: number) {
+    setToasts((current) => current.filter((item) => item.id !== id))
+  }
 
   function openSettingsPage() {
     settingsOpenRef.current = true
@@ -164,13 +228,45 @@ export function HostApp({ api }: HostAppProps) {
       setRenameError('名称不能为空')
       return
     }
+    if (name.length > 20) {
+      setRenameError('名称最多 20 个字')
+      return
+    }
     applyState(await api.updateInstance({ id: renaming.id, name, url: renaming.url }))
     closeRenameDialog()
   }
 
   function applyState(next: ShellState) {
+    const current = stateRef.current
+    setPortDraft((draft) => {
+      if (!current || draft === String(current.localPort)) {
+        return String(next.localPort || 3080)
+      }
+      return draft
+    })
+    setConnectHost((draft) => {
+      if (current?.url && !next.url) {
+        return hostFromUrl(current.url, draft)
+      }
+      const nextHost = hostFromUrl(next.url, '127.0.0.1')
+      if (!current || draft === hostFromUrl(current.url, '127.0.0.1')) {
+        return nextHost
+      }
+      return draft
+    })
+    setConnectPort((draft) => {
+      if (current?.url && !next.url) {
+        return String(portFromUrl(current.url, Number(draft) || next.localPort || 3080))
+      }
+      const nextPort = String(portFromUrl(next.url, next.localPort || 3080))
+      if (!current || draft === String(portFromUrl(current.url, current.localPort || 3080))) {
+        return nextPort
+      }
+      return draft
+    })
+    stateRef.current = next
     setState(next)
-    setSelectedId((current) => pickManager(next, current))
+    setSelectedId((selected) => pickManager(next, selected))
     if (next.starting) {
       if (!stayInSettingsWhileStartingRef.current) {
         closeSettingsPage()
@@ -192,8 +288,13 @@ export function HostApp({ api }: HostAppProps) {
     if (next.lastError) {
       setStatus(next.lastError)
       setStatusError(true)
+      if (isConnectFailure(next.lastError) && lastToastErrorRef.current !== next.lastError) {
+        lastToastErrorRef.current = next.lastError
+        showToast(connectFailureHint(next.lastError))
+      }
       return
     }
+    lastToastErrorRef.current = null
     if (next.detected && next.url) {
       setStatus('服务已在运行。更换启动命令后点保存，下次会用新命令拉起。')
       setStatusError(false)
@@ -274,7 +375,7 @@ export function HostApp({ api }: HostAppProps) {
     }
   }, [theme])
 
-  async function refreshUpdates(target: 'app' | 'dsh' | 'both') {
+  async function refreshUpdates(target: 'app' | 'dsh' | 'both' = 'both') {
     if (target === 'app' || target === 'both') {
       setCheckingApp(true)
     }
@@ -282,18 +383,27 @@ export function HostApp({ api }: HostAppProps) {
       setCheckingDsh(true)
     }
     try {
-      setUpdateReport(await api.checkUpdates())
+      const report = await api.checkUpdates(target)
+      setUpdateReport((current) => ({
+        app: target === 'dsh' ? current?.app ?? report.app : report.app,
+        dsh: target === 'app' ? current?.dsh ?? report.dsh : report.dsh,
+      }))
     } finally {
       setCheckingApp(false)
       setCheckingDsh(false)
     }
   }
 
-  const installDisabled = busy || Boolean(state?.starting) || !selectedId
-  const port = state?.localPort || 3080
+  const parsedPort = parsePortDraft(portDraft)
+  const parsedConnectPort = parsePortDraft(connectPort)
+  const starting = Boolean(state?.starting)
+  const portDirty = parsedPort !== null && parsedPort !== (state?.localPort ?? 3080)
+  const installDisabled = busy || starting || !selectedId || parsedPort === null
+  const savePortDisabled = busy || starting || !portDirty
+  const port = parsedPort ?? state?.localPort ?? 3080
+  const connectDisabled = busy || starting || !connectHost.trim() || parsedConnectPort === null
   const instances = visibleInstances(state)
   const instance = instances[0] ?? null
-  const starting = Boolean(state?.starting)
   const connected = Boolean(state?.detected && state.url)
   const showBoot = !settingsOpen && !state
   const showIdle = !settingsOpen && Boolean(state) && !connected && !starting
@@ -330,6 +440,7 @@ export function HostApp({ api }: HostAppProps) {
               key={item.id}
               instance={item}
               selected={!settingsOpen && item.id === instance?.id}
+              href={item.id === state?.activeInstanceId && state.url ? state.url : item.url}
               onSelect={() => {
                 closeSettingsPage()
                 if (item.id !== state?.activeInstanceId) {
@@ -385,7 +496,7 @@ export function HostApp({ api }: HostAppProps) {
                 id="instance-name"
                 value={renameValue}
                 autoFocus
-                maxLength={40}
+                maxLength={20}
                 onChange={(event) => {
                   setRenameValue(event.target.value)
                   if (renameError) {
@@ -416,85 +527,196 @@ export function HostApp({ api }: HostAppProps) {
             <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="border-b px-5 py-4">
                 <h2 className="text-sm font-medium">连接</h2>
-                <p className="mt-1 text-sm text-muted-foreground">查看当前实例的运行状态与来源。</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {connected ? '当前已连上 DeepSeek Harness。' : '还没有连上服务。填写地址后点连接。'}
+                </p>
               </div>
-              <div className="divide-y">
-                <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                  <span className="text-sm text-muted-foreground">状态</span>
-                  <span className="text-sm">{connected ? '已连接' : '未连接'}</span>
-                </div>
-                <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                  <span className="text-sm text-muted-foreground">名称</span>
-                  <span className="text-sm">{instance?.name ?? 'deepseek-harness'}</span>
-                </div>
-                <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                  <span className="text-sm text-muted-foreground">地址</span>
-                  <code className="font-mono text-sm">{state?.url ?? `http://127.0.0.1:${port}`}</code>
-                </div>
-                <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                  <span className="text-sm text-muted-foreground">运行时来源</span>
-                  <span className="text-sm">{sourceLabel(state?.sourceKind ?? 'none')}</span>
-                </div>
-                <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                  <span className="text-sm text-muted-foreground">已保存的启动命令</span>
-                  <span className="text-sm">{managerLabel(state?.lastPackageManager)}</span>
-                </div>
-                <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                  <Label htmlFor="localPort" className="text-sm font-normal text-muted-foreground">
-                    端口
-                  </Label>
-                  <Input id="localPort" type="text" inputMode="numeric" value={String(port)} readOnly className="max-w-40" />
-                </div>
-                {state?.lastError ? (
-                  <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-start">
-                    <span className="text-sm text-muted-foreground">最近错误</span>
-                    <span className="text-sm text-destructive">{state.lastError}</span>
+              {connected ? (
+                <>
+                  <div className="divide-y">
+                    <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
+                      <span className="text-sm text-muted-foreground">状态</span>
+                      <span className="text-sm">已连接</span>
+                    </div>
+                    <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
+                      <span className="text-sm text-muted-foreground">名称</span>
+                      <span className="text-sm">{instance?.name ?? 'deepseek-harness'}</span>
+                    </div>
+                    <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
+                      <span className="text-sm text-muted-foreground">地址</span>
+                      <code className="font-mono text-sm">{state?.url}</code>
+                    </div>
+                    <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
+                      <span className="text-sm text-muted-foreground">运行时来源</span>
+                      <span className="text-sm">{sourceLabel(state?.sourceKind ?? 'none')}</span>
+                    </div>
+                    {state?.lastError ? (
+                      <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-start">
+                        <span className="text-sm text-muted-foreground">最近错误</span>
+                        <span className="text-sm text-destructive">{state.lastError}</span>
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-              <div className="flex justify-end gap-2 border-t px-5 py-3">
-                <Button
-                  id="stop-service"
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || (!connected && !starting) || typeof api.stop !== 'function'}
-                  onClick={() => {
-                    if (typeof api.stop !== 'function') {
-                      setStatus('当前运行的是旧预加载脚本，请完全退出后重新执行 pnpm dev。')
-                      setStatusError(true)
-                      return
-                    }
-                    void run('正在终止本机 DeepSeek Harness…', () => api.stop!())
-                  }}
-                >
-                  终止服务
-                </Button>
-                <Button
-                  id="reconnect"
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || starting}
-                  onClick={() => {
-                    void run('正在重新连接…', () => api.detect())
-                  }}
-                >
-                  重新连接
-                </Button>
-              </div>
+                  <div className="flex justify-end gap-2 border-t px-5 py-3">
+                    <Button
+                      id="switch-connection"
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || starting || typeof api.disconnect !== 'function'}
+                      onClick={() => {
+                        if (typeof api.disconnect !== 'function') {
+                          setStatus('当前运行的是旧预加载脚本，请完全退出后重新执行 pnpm dev。')
+                          setStatusError(true)
+                          return
+                        }
+                        void run('正在切换连接…', () => api.disconnect!())
+                      }}
+                    >
+                      切换连接
+                    </Button>
+                    <Button
+                      id="detect"
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || starting}
+                      onClick={() => {
+                        void run('正在重新检测…', () =>
+                          api.detect({
+                            host: hostFromUrl(state?.url, connectHost),
+                            port: portFromUrl(state?.url, parsedPort ?? state?.localPort ?? 3080),
+                          }),
+                        )
+                      }}
+                    >
+                      重新检测
+                    </Button>
+                    <Button
+                      id="stop-service"
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || typeof api.stop !== 'function'}
+                      onClick={() => {
+                        if (typeof api.stop !== 'function') {
+                          setStatus('当前运行的是旧预加载脚本，请完全退出后重新执行 pnpm dev。')
+                          setStatusError(true)
+                          return
+                        }
+                        void run('正在终止本机 DeepSeek Harness…', () => api.stop!())
+                      }}
+                    >
+                      终止服务
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="divide-y">
+                    <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
+                      <span className="text-sm text-muted-foreground">状态</span>
+                      <span className="text-sm">{starting ? '启动中' : '未连接'}</span>
+                    </div>
+                    <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
+                      <span className="text-sm text-muted-foreground">地址</span>
+                      <div className="flex min-w-0 items-center justify-start gap-2">
+                        <Input
+                          id="connectHost"
+                          type="text"
+                          aria-label="IP"
+                          placeholder="127.0.0.1"
+                          value={connectHost}
+                          className="w-40"
+                          onChange={(event) => {
+                            setConnectHost(event.target.value)
+                          }}
+                        />
+                        <Input
+                          id="connectPort"
+                          type="text"
+                          inputMode="numeric"
+                          aria-label="连接端口"
+                          placeholder="3080"
+                          value={connectPort}
+                          className="w-24"
+                          onChange={(event) => {
+                            setConnectPort(event.target.value)
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 border-t px-5 py-3">
+                    <Button
+                      id="detect"
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={connectDisabled}
+                      onClick={() => {
+                        if (!connectHost.trim() || parsedConnectPort === null) {
+                          setStatus('请输入有效的 IP 和 1–65535 端口')
+                          setStatusError(true)
+                          return
+                        }
+                        void run('正在重新检测…', () =>
+                          api.detect({ host: connectHost.trim(), port: parsedConnectPort }),
+                        )
+                      }}
+                    >
+                      重新检测
+                    </Button>
+                    <Button
+                      id="connect"
+                      type="button"
+                      size="sm"
+                      disabled={connectDisabled}
+                      onClick={() => {
+                        if (!connectHost.trim() || parsedConnectPort === null) {
+                          setStatus('请输入有效的 IP 和 1–65535 端口')
+                          setStatusError(true)
+                          return
+                        }
+                        void run('正在连接…', () =>
+                          api.detect({ host: connectHost.trim(), port: parsedConnectPort }),
+                        )
+                      }}
+                    >
+                      {busy ? '连接中…' : '连接'}
+                    </Button>
+                  </div>
+                </>
+              )}
             </section>
 
             <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="border-b px-5 py-4">
                 <h2 className="text-sm font-medium">启动 DeepSeek Harness</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  首次使用请选择本机已有的包管理器。确认后会写入配置，以后启动应用会默认用这条命令拉起{' '}
+                  首次使用请选择本机已有的包管理器。确认后会写入配置。
+                  <br />
+                  打开下方「自动启动」后，下次打开应用才会用这条命令拉起{' '}
                   <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">127.0.0.1:{port}</code>
                   。
                 </p>
               </div>
               <div className="space-y-4 px-5 py-4">
+                <div className="grid gap-1 sm:grid-cols-[160px_1fr] sm:items-center">
+                  <Label htmlFor="startPort" className="text-sm font-normal text-muted-foreground">
+                    启动端口
+                  </Label>
+                  <Input
+                    id="startPort"
+                    type="text"
+                    inputMode="numeric"
+                    value={portDraft}
+                    className="max-w-40"
+                    onChange={(event) => {
+                      setPortDraft(event.target.value)
+                    }}
+                  />
+                </div>
                 {!state || state.managers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     没有在 PATH 里找到 pnpm、npx、yarn 或 bunx。请先安装其中一个。
@@ -518,7 +740,9 @@ export function HostApp({ api }: HostAppProps) {
                         <RadioGroupItem id={`manager-${item.id}`} value={item.id} aria-label={item.label} className="mt-0.5" />
                         <span className="min-w-0">
                           <span className="block font-medium text-foreground">{item.label}</span>
-                          <span className="block text-xs font-normal text-muted-foreground">{item.preview}</span>
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            {previewWithPort(item.preview, port)}
+                          </span>
                         </span>
                       </Label>
                     ))}
@@ -534,33 +758,46 @@ export function HostApp({ api }: HostAppProps) {
                 ) : null}
               </div>
               <div className="flex justify-end gap-2 border-t px-5 py-3">
-                <Button
-                  id="detect"
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || starting}
-                  onClick={() => {
-                    void run('正在重新检测…', () => api.detect())
-                  }}
-                >
-                  重新检测
-                </Button>
+                {portDirty ? (
+                  <Button
+                    id="save-port"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={savePortDisabled}
+                    onClick={() => {
+                      if (parsedPort === null) {
+                        setStatus('端口必须是 1–65535 的整数')
+                        setStatusError(true)
+                        return
+                      }
+                      void run('正在保存启动端口…', () => api.saveLocalPort({ localPort: parsedPort }))
+                    }}
+                  >
+                    保存
+                  </Button>
+                ) : null}
                 <Button
                   id="install"
                   type="button"
                   size="sm"
                   disabled={installDisabled}
                   onClick={() => {
-                    if (!selectedId) {
+                    if (!selectedId || parsedPort === null) {
+                      if (parsedPort === null) {
+                        setStatus('端口必须是 1–65535 的整数')
+                        setStatusError(true)
+                      }
                       return
                     }
                     stayInSettingsWhileStartingRef.current = true
                     setLog('')
-                    void run('正在执行命令，启动日志会显示在下方…', () => api.install(selectedId))
+                    void run('正在执行命令，启动日志会显示在下方…', () =>
+                      api.install(selectedId, { localPort: parsedPort }),
+                    )
                   }}
                 >
-                  {starting ? '启动中…' : state?.lastPackageManager ? '保存并启动' : '确认并启动'}
+                  {starting ? '启动中…' : '启动'}
                 </Button>
               </div>
             </section>
@@ -569,69 +806,108 @@ export function HostApp({ api }: HostAppProps) {
               <div className="border-b px-5 py-4">
                 <h2 className="text-sm font-medium">通用</h2>
               </div>
-              <div className="flex items-center justify-between gap-6 px-5 py-4">
-                <div className="min-w-0">
-                  <Label htmlFor="openAtLogin" className="text-sm font-medium">
-                    登录时自动启动
-                  </Label>
-                  <p className="mt-1 text-sm text-muted-foreground">开机后自动启动本应用，并在后台保持运行。</p>
+              <div className="divide-y">
+                <div className="flex items-center justify-between gap-6 px-5 py-4">
+                  <div className="min-w-0">
+                    <Label htmlFor="autoStart" className="text-sm font-medium">
+                      自动启动 DeepSeek Harness
+                    </Label>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      打开应用后，若本机端口还没起来，就用已保存的命令拉起服务。默认关闭。
+                    </p>
+                  </div>
+                  <Switch
+                    id="autoStart"
+                    checked={Boolean(state?.autoStart)}
+                    onCheckedChange={(checked) => {
+                      void api.saveHost({ autoStart: checked })
+                    }}
+                  />
                 </div>
-                <Switch
-                  id="openAtLogin"
-                  checked={Boolean(state?.openAtLogin)}
-                  onCheckedChange={(checked) => {
-                    void api.saveHost({ openAtLogin: checked })
-                  }}
-                />
+                <div className="flex items-center justify-between gap-6 px-5 py-4">
+                  <div className="min-w-0">
+                    <Label htmlFor="openAtLogin" className="text-sm font-medium">
+                      登录时自动启动
+                    </Label>
+                    <p className="mt-1 text-sm text-muted-foreground">开机后自动启动本应用，并在后台保持运行。</p>
+                  </div>
+                  <Switch
+                    id="openAtLogin"
+                    checked={Boolean(state?.openAtLogin)}
+                    onCheckedChange={(checked) => {
+                      void api.saveHost({ openAtLogin: checked })
+                    }}
+                  />
+                </div>
               </div>
             </section>
 
             <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="border-b px-5 py-4">
                 <h2 className="text-sm font-medium">更新</h2>
-                <p className="mt-1 text-sm text-muted-foreground">分别检查应用与 DeepSeek Harness 的版本，不会自动安装。</p>
+                <p className="mt-1 text-sm text-muted-foreground">只检查版本，不会自动安装。</p>
               </div>
               <div className="divide-y">
                 <div className="flex items-center justify-between gap-6 px-5 py-4">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">dsh-desktop</p>
-                    <p id="appUpdateStatus" className="mt-1 text-sm text-muted-foreground">
-                      {versionStatus(updateReport?.app ?? null, state?.appVersion ?? null)}
+                  <p className="text-sm font-medium">dsh-desktop</p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <p id="appUpdateStatus" className="text-right text-sm text-muted-foreground">
+                      <span>{versionLabel(updateReport?.app ?? null, state?.appVersion ?? null)}</span>
+                      {versionHint(updateReport?.app ?? null) ? (
+                        <span className="mt-0.5 block text-xs">{versionHint(updateReport?.app ?? null)}</span>
+                      ) : null}
                     </p>
+                    {updateReport?.app?.updateAvailable ? (
+                      <Button
+                        id="updateApp"
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          void refreshUpdates('app')
+                        }}
+                      >
+                        更新
+                      </Button>
+                    ) : null}
                   </div>
-                  <Button
-                    id="checkAppUpdates"
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={checkingApp}
-                    onClick={() => {
-                      void refreshUpdates('app')
-                    }}
-                  >
-                    {checkingApp ? '检查中…' : '检查更新'}
-                  </Button>
                 </div>
                 <div className="flex items-center justify-between gap-6 px-5 py-4">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">DeepSeek Harness</p>
-                    <p id="dshUpdateStatus" className="mt-1 text-sm text-muted-foreground">
-                      {versionStatus(updateReport?.dsh ?? null, state?.dshVersion ?? null)}
+                  <p className="text-sm font-medium">DeepSeek Harness</p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <p id="dshUpdateStatus" className="text-right text-sm text-muted-foreground">
+                      <span>{versionLabel(updateReport?.dsh ?? null, state?.dshVersion ?? null)}</span>
+                      {versionHint(updateReport?.dsh ?? null) ? (
+                        <span className="mt-0.5 block text-xs">{versionHint(updateReport?.dsh ?? null)}</span>
+                      ) : null}
                     </p>
+                    {updateReport?.dsh?.updateAvailable ? (
+                      <Button
+                        id="updateDsh"
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          void refreshUpdates('dsh')
+                        }}
+                      >
+                        更新
+                      </Button>
+                    ) : null}
                   </div>
-                  <Button
-                    id="checkDshUpdates"
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={checkingDsh}
-                    onClick={() => {
-                      void refreshUpdates('dsh')
-                    }}
-                  >
-                    {checkingDsh ? '检查中…' : '检查更新'}
-                  </Button>
                 </div>
+              </div>
+              <div className="flex justify-end border-t px-5 py-3">
+                <Button
+                  id="checkUpdates"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={checkingApp || checkingDsh}
+                  onClick={() => {
+                    void refreshUpdates('both')
+                  }}
+                >
+                  {checkingApp || checkingDsh ? '检查中…' : '检查更新'}
+                </Button>
               </div>
             </section>
 
@@ -704,6 +980,8 @@ export function HostApp({ api }: HostAppProps) {
           </Card>
         </main>
       ) : null}
+
+      <Toaster toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

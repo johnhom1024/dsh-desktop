@@ -1,4 +1,4 @@
-export type HostShortcut = 'reload-host' | 'reconnect' | 'open-settings' | 'toggle-devtools'
+export type HostShortcut = 'reload-view' | 'open-settings' | 'toggle-devtools'
 
 export type ShortcutInput = {
   type: string
@@ -31,10 +31,7 @@ export function hostShortcutFor(
     return null
   }
   if (key === 'r') {
-    if (opts.isDev && input.shift) {
-      return 'reconnect'
-    }
-    return opts.isDev ? 'reload-host' : 'reconnect'
+    return 'reload-view'
   }
   if (key === ',') {
     return 'open-settings'

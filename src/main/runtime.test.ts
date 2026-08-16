@@ -8,6 +8,7 @@ function settings(partial: Partial<Settings> = {}): Settings {
     instances: [local],
     activeInstanceId: local.id,
     openAtLogin: false,
+    autoStart: false,
     ...partial,
   }
 }

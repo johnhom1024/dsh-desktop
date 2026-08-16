@@ -22,6 +22,7 @@ export type Settings = {
   instances: Instance[]
   activeInstanceId: string
   openAtLogin: boolean
+  autoStart: boolean
   lastPackageManager?: PackageManagerId
   windowBounds?: WindowBounds
 }
@@ -61,6 +62,7 @@ export function defaultSettings(): Settings {
     instances: [local],
     activeInstanceId: local.id,
     openAtLogin: false,
+    autoStart: false,
   }
 }
 

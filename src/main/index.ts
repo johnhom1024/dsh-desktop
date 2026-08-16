@@ -1,11 +1,25 @@
 import { execFile } from 'node:child_process'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { BrowserWindow, Menu, Tray, WebContentsView, app, ipcMain, nativeTheme, shell, type WebContents } from 'electron'
-import { readDshPackage } from './dsh-package.js'
-import { readCliDshVersion } from './dsh-version.js'
+import {
+  BrowserWindow,
+  Menu,
+  Tray,
+  WebContentsView,
+  app,
+  ipcMain,
+  nativeImage,
+  nativeTheme,
+  shell,
+  type MenuItemConstructorOptions,
+  type WebContents,
+} from 'electron'
+import { findNpxCachedDsh, findPnpmDlxCachedDsh, readDshPackage } from './dsh-package.js'
+import { parseDshVersionFromText, readCliDshVersion } from './dsh-version.js'
 import { startHarnessWeb, stopListeningOnPort } from './harness-process.js'
 import { appendHostLog, formatTrayStatus } from './host-state.js'
-import { removeInstance, renameInstance, selectInstance, upsertInstance } from './instances.js'
+import { instanceExternalUrl, instanceMenuItems, type InstanceMenuAction } from './instance-menu.js'
+import { removeInstance, renameInstance, selectInstance, setLocalPort, upsertInstance } from './instances.js'
 import { TAB_BAR_HEIGHT, layoutActiveView, shouldShowInstanceView } from './instance-views.js'
 import { launchSpecFor } from './launch.js'
 import {
@@ -28,7 +42,7 @@ import {
   type RuntimeSource,
   type Settings,
 } from './runtime.js'
-import { loadSettings, saveSettings } from './settings.js'
+import { isLoopbackHost, loadSettings, parseConnectTarget, parseLocalPort, saveSettings } from './settings.js'
 import { bindSingleInstance } from './single-instance.js'
 import { createTray, hideInsteadOfClose, setTrayStatus } from './tray.js'
 import {
@@ -36,6 +50,7 @@ import {
   fetchGithubLatestTag,
   fetchNpmLatestVersion,
   type UpdateReport,
+  type UpdateTarget,
 } from './updates.js'
 import { applyDesktopIcon, attachWindowGuards, createMainWindow, loadHostUrl, loadShellPage } from './window.js'
 
@@ -93,6 +108,25 @@ function execText(command: string, args: string[]): Promise<string | null> {
   })
 }
 
+async function versionFromConnectedPage(): Promise<string | null> {
+  if (!currentUrl) {
+    return null
+  }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 2500)
+  try {
+    const response = await fetch(currentUrl, { signal: controller.signal })
+    if (!response.ok) {
+      return null
+    }
+    return parseDshVersionFromText(await response.text())
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function currentDshVersion(): Promise<string | null> {
   if (
     currentSource.kind === 'pnpm-dlx' ||
@@ -101,7 +135,13 @@ async function currentDshVersion(): Promise<string | null> {
   ) {
     return currentSource.version
   }
-  return (await readCliDshVersion(execText)) ?? bundledPackage()?.version ?? null
+  return (
+    (await readCliDshVersion(execText)) ??
+    findPnpmDlxCachedDsh(join(homedir(), 'Library', 'Caches', 'pnpm', 'dlx'))?.version ??
+    findNpxCachedDsh(join(homedir(), '.npm', '_npx'))?.version ??
+    bundledPackage()?.version ??
+    (await versionFromConnectedPage())
+  )
 }
 
 function applyOpenAtLogin(enabled: boolean): void {
@@ -225,17 +265,6 @@ function isDevHost(): boolean {
   return Boolean(process.env.VITE_DEV_SERVER_URL)
 }
 
-function reloadHostPage(): void {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return
-  }
-  if (isDevHost()) {
-    mainWindow.webContents.reloadIgnoringCache()
-    return
-  }
-  loadHostPage(mainWindow)
-}
-
 function focusedContents(): WebContents | null {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return null
@@ -262,13 +291,24 @@ function toggleDevTools(target?: WebContents): void {
   contents.openDevTools({ mode: 'detach' })
 }
 
-function handleHostShortcut(action: HostShortcut, source: WebContents): void {
-  if (action === 'reload-host') {
-    reloadHostPage()
-    return
+function reloadInstanceView(instanceId?: string): boolean {
+  const id = instanceId || loadSettings(userData()).activeInstanceId
+  if (!id) {
+    return false
   }
-  if (action === 'reconnect') {
-    void connectActive()
+  const view = instanceViews.get(id)
+  if (!view || view.webContents.isDestroyed()) {
+    return false
+  }
+  view.webContents.reload()
+  return true
+}
+
+function handleHostShortcut(action: HostShortcut, source: WebContents): void {
+  if (action === 'reload-view') {
+    if (!reloadInstanceView()) {
+      source.reload()
+    }
     return
   }
   if (action === 'toggle-devtools') {
@@ -393,6 +433,17 @@ async function stopOwnedHarness(): Promise<void> {
   stopHarness = null
 }
 
+async function disconnectWithoutStopping(): Promise<void> {
+  starting = false
+  stopWatch()
+  lastError = null
+  currentSource = { kind: 'none' }
+  currentUrl = null
+  hideInstanceViews()
+  refreshTray()
+  await pushState()
+}
+
 async function stopLocalService(): Promise<void> {
   starting = false
   stopWatch()
@@ -456,6 +507,7 @@ export type ShellState = {
   starting: boolean
   settingsOpen: boolean
   openAtLogin: boolean
+  autoStart: boolean
   appVersion: string
   dshVersion: string | null
 }
@@ -475,6 +527,7 @@ async function shellState(): Promise<ShellState> {
     starting,
     settingsOpen: false,
     openAtLogin: settings.openAtLogin,
+    autoStart: settings.autoStart,
     appVersion: app.getVersion(),
     dshVersion: await currentDshVersion(),
   }
@@ -487,7 +540,77 @@ async function pushState(): Promise<void> {
   mainWindow.webContents.send('shellState', await shellState())
 }
 
-async function connectActive(): Promise<void> {
+function rememberLocalView(previousId: string | undefined, nextId: string | undefined): void {
+  if (!previousId || !nextId || previousId === nextId) {
+    return
+  }
+  const view = instanceViews.get(previousId)
+  if (!view) {
+    return
+  }
+  instanceViews.delete(previousId)
+  instanceViews.set(nextId, view)
+}
+
+function applyLocalPort(port: unknown): boolean {
+  const parsed = parseLocalPort(port)
+  if (parsed === null) {
+    lastError = '端口必须是 1–65535 的整数'
+    return false
+  }
+  const current = loadSettings(userData())
+  const previous = current.instances.find((item) => item.kind === 'local')
+  const next = setLocalPort(current, parsed)
+  if (!next) {
+    lastError = '端口必须是 1–65535 的整数'
+    return false
+  }
+  if (next !== current) {
+    persistSettings(next)
+    rememberLocalView(previous?.id, next.instances.find((item) => item.kind === 'local')?.id)
+  }
+  return true
+}
+
+async function connectTarget(input: { host?: unknown; port?: unknown }): Promise<void> {
+  const target = parseConnectTarget(input)
+  if (!target) {
+    lastError = '请输入有效的 IP 和 1–65535 端口'
+    await pushState()
+    return
+  }
+
+  if (isLoopbackHost(target.host)) {
+    if (!applyLocalPort(target.port)) {
+      await pushState()
+      return
+    }
+    await connectActive({ spawn: false })
+    if (!currentUrl && !lastError) {
+      lastError = `http://${target.host}:${target.port} 上没有运行 DeepSeek Harness。可以启动服务。`
+      await pushState()
+    }
+    return
+  }
+
+  const url = `http://${target.host}:${target.port}`
+  const reachable = await probeHarnessWeb(url)
+  if (!reachable) {
+    lastError = `无法连接到 ${url}。请确认那边已经启动 DeepSeek Harness。`
+    currentUrl = null
+    hideInstanceViews()
+    refreshTray()
+    await pushState()
+    return
+  }
+
+  currentSource = { kind: 'remote', url }
+  showInstanceView(loadSettings(userData()).activeInstanceId, url)
+  refreshTray()
+  await pushState()
+}
+
+async function connectActive(opts?: { spawn?: boolean }): Promise<void> {
   starting = false
   lastError = null
   currentUrl = null
@@ -514,7 +637,8 @@ async function connectActive(): Promise<void> {
       await pushState()
       return
     }
-    if (active.kind === 'local' && settings.lastPackageManager) {
+    const shouldSpawn = opts?.spawn ?? settings.autoStart
+    if (active.kind === 'local' && settings.lastPackageManager && shouldSpawn) {
       await installWithManager(settings.lastPackageManager)
       return
     }
@@ -637,10 +761,11 @@ function ensureMainWindow(): BrowserWindow {
   return mainWindow
 }
 
-async function inspectUpdates(): Promise<UpdateReport> {
+async function inspectUpdates(target: UpdateTarget = 'both'): Promise<UpdateReport> {
   return checkUpdates({
     appCurrent: app.getVersion(),
     dshCurrent: await currentDshVersion(),
+    target,
     fetchLatest: async (name) => {
       if (name === '@deepseek-ai/dsh') {
         return fetchNpmLatestVersion(name)
@@ -677,30 +802,12 @@ function registerMenu(): void {
                 accelerator: 'CmdOrCtrl+,',
                 click: () => openSettings(),
               },
-              ...(isDevHost()
-                ? [
-                    {
-                      label: '重载宿主页',
-                      accelerator: 'CmdOrCtrl+R',
-                      click: () => reloadHostPage(),
-                    },
-                    {
-                      label: '重新检测',
-                      accelerator: 'Shift+CmdOrCtrl+R',
-                      click: () => {
-                        void connectActive()
-                      },
-                    },
-                  ]
-                : [
-                    {
-                      label: '重新检测',
-                      accelerator: 'CmdOrCtrl+R',
-                      click: () => {
-                        void connectActive()
-                      },
-                    },
-                  ]),
+              {
+                label: '重新检测',
+                click: () => {
+                  void connectActive()
+                },
+              },
               {
                 label: '检测更新…',
                 click: () => {
@@ -738,6 +845,13 @@ function registerMenu(): void {
       label: '查看',
       submenu: [
         {
+          label: '刷新',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => {
+            reloadInstanceView()
+          },
+        },
+        {
           label: '开发者工具',
           accelerator: 'Alt+CmdOrCtrl+I',
           click: () => toggleDevTools(),
@@ -754,19 +868,47 @@ function registerMenu(): void {
 }
 
 function registerIpc(): void {
-  ipcMain.handle('settingsCheckUpdates', () => inspectUpdates())
+  ipcMain.handle('settingsCheckUpdates', (_event, target?: unknown) =>
+    inspectUpdates(target === 'app' || target === 'dsh' ? target : 'both'),
+  )
 
   ipcMain.handle('shellGetState', () => shellState())
 
-  ipcMain.handle('shellDetect', async () => {
-    await connectActive()
+  ipcMain.handle('shellDetect', async (_event, input?: { host?: unknown; port?: unknown; localPort?: unknown }) => {
+    if (input?.host !== undefined || input?.port !== undefined) {
+      await connectTarget({ host: input.host, port: input.port ?? input.localPort })
+      return shellState()
+    }
+    if (input?.localPort !== undefined && !applyLocalPort(input.localPort)) {
+      return shellState()
+    }
+    await connectActive({ spawn: false })
     return shellState()
   })
 
-  ipcMain.handle('shellInstall', (_event, id: PackageManagerId) => installWithManager(id))
+  ipcMain.handle('shellSaveLocalPort', async (_event, input?: { localPort?: unknown }) => {
+    if (!applyLocalPort(input?.localPort)) {
+      return shellState()
+    }
+    lastError = null
+    await pushState()
+    return shellState()
+  })
+
+  ipcMain.handle('shellInstall', async (_event, id: PackageManagerId, input?: { localPort?: unknown }) => {
+    if (input?.localPort !== undefined && !applyLocalPort(input.localPort)) {
+      return shellState()
+    }
+    return installWithManager(id)
+  })
 
   ipcMain.handle('shellStop', async () => {
     await stopLocalService()
+    return shellState()
+  })
+
+  ipcMain.handle('shellDisconnect', async () => {
+    await disconnectWithoutStopping()
     return shellState()
   })
 
@@ -795,15 +937,30 @@ function registerIpc(): void {
     if (!instance) {
       return null
     }
-    return new Promise<'rename' | null>((resolve) => {
-      const menu = Menu.buildFromTemplate([
-        {
-          label: '重命名',
-          click: () => {
-            resolve('rename')
-          },
-        },
-      ])
+    const liveUrl = instance.id === loadSettings(userData()).activeInstanceId ? currentUrl : null
+    const externalUrl = instanceExternalUrl({ url: liveUrl, fallbackUrl: instance.url })
+    const canReload = Boolean(instanceViews.get(instance.id) && !instanceViews.get(instance.id)?.webContents.isDestroyed())
+    return new Promise<InstanceMenuAction | null>((resolve) => {
+      const menu = Menu.buildFromTemplate(
+        instanceMenuItems(canReload, Boolean(externalUrl)).map((item): MenuItemConstructorOptions => {
+          const icon = nativeImage.createFromNamedImage(item.symbol, [-1, 0, 1])
+          return {
+            id: item.id,
+            label: item.label,
+            enabled: item.enabled,
+            icon: icon.isEmpty() ? undefined : icon,
+            click: () => {
+              if (item.id === 'reload') {
+                reloadInstanceView(instance.id)
+              }
+              if (item.id === 'open-external' && externalUrl) {
+                void shell.openExternal(externalUrl)
+              }
+              resolve(item.id)
+            },
+          }
+        }),
+      )
       menu.popup({
         window: mainWindow ?? undefined,
         callback: () => {
@@ -841,7 +998,7 @@ function registerIpc(): void {
     async (_event, input: { id: string; name: string; url: string }) => {
       const next = renameInstance(loadSettings(userData()), input.id, input.name)
       if (!next) {
-        lastError = '名称不能为空'
+        lastError = '名称不能为空，且最多 20 个字'
         return shellState()
       }
       persistSettings(next)
@@ -866,8 +1023,15 @@ function registerIpc(): void {
     return shellState()
   })
 
-  ipcMain.handle('shellSaveHost', (_event, input: { openAtLogin: boolean }) => {
-    return persistSettings({ ...loadSettings(userData()), openAtLogin: input.openAtLogin === true })
+  ipcMain.handle('shellSaveHost', async (_event, input: { openAtLogin?: boolean; autoStart?: boolean }) => {
+    const current = loadSettings(userData())
+    const ok = persistSettings({
+      ...current,
+      openAtLogin: input.openAtLogin === undefined ? current.openAtLogin : input.openAtLogin === true,
+      autoStart: input.autoStart === undefined ? current.autoStart : input.autoStart === true,
+    })
+    await pushState()
+    return ok
   })
 
   ipcMain.handle('shellOpenUserData', () => {

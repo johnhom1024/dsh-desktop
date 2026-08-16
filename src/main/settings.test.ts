@@ -3,7 +3,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { loadSettings, saveSettings } from './settings.js'
+import { isLoopbackHost, loadSettings, parseConnectTarget, saveSettings } from './settings.js'
 
 const LOCAL_3080 = {
   id: 'local-3080',
@@ -16,7 +16,15 @@ const DEFAULTS = {
   instances: [LOCAL_3080],
   activeInstanceId: 'local-3080',
   openAtLogin: false,
+  autoStart: false,
 } as const
+
+test('parseConnectTarget accepts a host and port', () => {
+  deepEqual(parseConnectTarget({ host: ' 127.0.0.1 ', port: '3080' }), { host: '127.0.0.1', port: 3080 })
+  equal(parseConnectTarget({ host: '', port: 3080 }), null)
+  equal(isLoopbackHost('127.0.0.1'), true)
+  equal(isLoopbackHost('192.168.31.229'), false)
+})
 
 test('loadSettings returns a default local instance when the file is missing', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
@@ -173,6 +181,20 @@ test('saveSettings accepts a numeric local port sent as a string', async () => {
   const loaded = loadSettings(dir)
   equal(loaded.instances[0]?.url, 'http://127.0.0.1:18080')
   equal(loaded.activeInstanceId, 'local-18080')
+})
+
+test('saveSettings then loadSettings round-trips autoStart', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+
+  equal(
+    saveSettings(dir, {
+      instances: [LOCAL_3080],
+      activeInstanceId: 'local-3080',
+      autoStart: true,
+    }),
+    true,
+  )
+  deepEqual(loadSettings(dir), { ...DEFAULTS, autoStart: true })
 })
 
 test('saveSettings then loadSettings round-trips openAtLogin', async () => {

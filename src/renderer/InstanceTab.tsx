@@ -6,13 +6,32 @@ import type { Instance } from './dsh-shell'
 type InstanceTabProps = {
   instance: Instance
   selected: boolean
+  href?: string | null
   onSelect: (instance: Instance) => void
   onMenu: (instance: Instance) => void
 }
 
-export function InstanceTab({ instance, selected, onSelect, onMenu }: InstanceTabProps) {
+export function tabUrlLabel(url: string | null | undefined): string | undefined {
+  if (!url) {
+    return undefined
+  }
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return url
+    }
+    const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80')
+    return `${parsed.protocol}//${parsed.hostname}:${port}`
+  } catch {
+    return url
+  }
+}
+
+export function InstanceTab({ instance, selected, href, onSelect, onMenu }: InstanceTabProps) {
+  const urlLabel = tabUrlLabel(href ?? instance.url)
   return (
     <div
+      title={urlLabel}
       className={cn(
         'group inline-flex h-8 max-w-60 min-w-0 items-center rounded-lg border pl-2.5 pr-0.5 text-sm transition-colors',
         selected

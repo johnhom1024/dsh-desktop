@@ -29,6 +29,20 @@ export function parseLocalPort(value: unknown): number | null {
   return port
 }
 
+export function isLoopbackHost(value: string): boolean {
+  const host = value.trim().toLowerCase()
+  return host === '127.0.0.1' || host === 'localhost'
+}
+
+export function parseConnectTarget(input: { host?: unknown; port?: unknown }): { host: string; port: number } | null {
+  const host = typeof input.host === 'string' ? input.host.trim() : ''
+  const port = parseLocalPort(input.port)
+  if (!host || !port) {
+    return null
+  }
+  return { host, port }
+}
+
 function parseWindowBounds(value: unknown): WindowBounds | null {
   if (!value || typeof value !== 'object') {
     return null
@@ -108,6 +122,7 @@ export type SettingsInput = {
   instances?: unknown
   activeInstanceId?: unknown
   openAtLogin?: unknown
+  autoStart?: unknown
   lastPackageManager?: unknown
   windowBounds?: unknown
 }
@@ -164,6 +179,7 @@ function normalize(raw: unknown): Settings {
     instances,
     activeInstanceId,
     openAtLogin: candidate.openAtLogin === true,
+    autoStart: candidate.autoStart === true,
   }
 
   if (

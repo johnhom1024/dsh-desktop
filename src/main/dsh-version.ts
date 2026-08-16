@@ -1,3 +1,8 @@
+export function parseDshVersionFromText(text: string): string | null {
+  const match = text.match(/v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/)
+  return match?.[1] ?? null
+}
+
 export function parseDshVersionOutput(stdout: string): string | null {
   const line = stdout
     .split(/\r?\n/)
@@ -6,8 +11,7 @@ export function parseDshVersionOutput(stdout: string): string | null {
   if (!line) {
     return null
   }
-  const match = line.match(/v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/)
-  return match?.[1] ?? line
+  return parseDshVersionFromText(line) ?? line
 }
 
 export async function readCliDshVersion(

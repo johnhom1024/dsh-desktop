@@ -16,16 +16,21 @@ export type ShellState = {
   starting: boolean
   settingsOpen: boolean
   openAtLogin: boolean
+  autoStart: boolean
   appVersion: string
   dshVersion: string | null
 }
 
 contextBridge.exposeInMainWorld('dshShell', {
   getState: (): Promise<ShellState> => ipcRenderer.invoke('shellGetState'),
-  detect: (): Promise<ShellState> => ipcRenderer.invoke('shellDetect'),
-  install: (id: PackageManagerOption['id']): Promise<ShellState> =>
-    ipcRenderer.invoke('shellInstall', id),
+  detect: (input?: { host?: string; port?: number; localPort?: number }): Promise<ShellState> =>
+    ipcRenderer.invoke('shellDetect', input),
+  install: (id: PackageManagerOption['id'], input?: { localPort?: number }): Promise<ShellState> =>
+    ipcRenderer.invoke('shellInstall', id, input),
+  saveLocalPort: (input: { localPort: number }): Promise<ShellState> =>
+    ipcRenderer.invoke('shellSaveLocalPort', input),
   stop: (): Promise<ShellState> => ipcRenderer.invoke('shellStop'),
+  disconnect: (): Promise<ShellState> => ipcRenderer.invoke('shellDisconnect'),
   selectInstance: (id: string): Promise<ShellState> => ipcRenderer.invoke('shellSelectInstance', id),
   addInstance: (input: { name: string; kind: 'local' | 'remote'; url: string }): Promise<ShellState> =>
     ipcRenderer.invoke('shellAddInstance', input),
@@ -36,11 +41,12 @@ contextBridge.exposeInMainWorld('dshShell', {
   closeSettings: (): Promise<void> => ipcRenderer.invoke('shellCloseSettings'),
   acquireOverlay: (): Promise<void> => ipcRenderer.invoke('shellAcquireOverlay'),
   releaseOverlay: (): Promise<void> => ipcRenderer.invoke('shellReleaseOverlay'),
-  popupInstanceMenu: (input: { instanceId: string }): Promise<'rename' | null> =>
+  popupInstanceMenu: (input: { instanceId: string }): Promise<'rename' | 'reload' | 'open-external' | null> =>
     ipcRenderer.invoke('shellPopupInstanceMenu', input),
-  saveHost: (input: { openAtLogin: boolean }): Promise<boolean> =>
+  saveHost: (input: { openAtLogin?: boolean; autoStart?: boolean }): Promise<boolean> =>
     ipcRenderer.invoke('shellSaveHost', input),
-  checkUpdates: (): Promise<UpdateReport> => ipcRenderer.invoke('settingsCheckUpdates'),
+  checkUpdates: (target?: 'app' | 'dsh' | 'both'): Promise<UpdateReport> =>
+    ipcRenderer.invoke('settingsCheckUpdates', target),
   openUserData: (): Promise<void> => ipcRenderer.invoke('shellOpenUserData'),
   setTheme: (mode: 'light' | 'dark' | 'system'): Promise<void> =>
     ipcRenderer.invoke('shellSetTheme', mode),

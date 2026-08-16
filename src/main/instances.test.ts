@@ -1,11 +1,11 @@
 import { deepEqual, equal } from 'node:assert/strict'
 import { test } from 'node:test'
 import { defaultLocalInstance, type Settings } from './runtime.js'
-import { instanceLabel, removeInstance, renameInstance, selectInstance, upsertInstance } from './instances.js'
+import { instanceLabel, removeInstance, renameInstance, selectInstance, setLocalPort, upsertInstance } from './instances.js'
 
 function base(): Settings {
   const local = defaultLocalInstance()
-  return { instances: [local], activeInstanceId: local.id, openAtLogin: false }
+  return { instances: [local], activeInstanceId: local.id, openAtLogin: false, autoStart: false }
 }
 
 test('selectInstance rejects an unknown id', () => {
@@ -54,7 +54,7 @@ test('removeInstance moves activeId when the active tab is removed', () => {
     url: 'http://192.168.31.229:3080',
   }
   const next = removeInstance(
-    { instances: [local, remote], activeInstanceId: remote.id, openAtLogin: false },
+    { instances: [local, remote], activeInstanceId: remote.id, openAtLogin: false, autoStart: false },
     remote.id,
   )
   deepEqual(next?.instances, [local])
@@ -72,6 +72,10 @@ test('renameInstance rejects a blank name', () => {
   equal(renameInstance(base(), 'local-3080', '   '), null)
 })
 
+test('renameInstance rejects a name longer than 20 characters', () => {
+  equal(renameInstance(base(), 'local-3080', '一二三四五六七八九十一二三四五六七八九十超'), null)
+})
+
 test('upsertInstance can rename a local instance without changing its url', () => {
   const next = upsertInstance(base(), {
     id: 'local-3080',
@@ -82,6 +86,23 @@ test('upsertInstance can rename a local instance without changing its url', () =
   equal(next?.instances[0]?.name, '工作区')
   equal(next?.instances[0]?.url, 'http://127.0.0.1:3080')
   equal(next?.instances.length, 1)
+})
+
+test('setLocalPort rewrites the local instance url and id', () => {
+  const next = setLocalPort(base(), 18080)
+  equal(next?.instances[0]?.id, 'local-18080')
+  equal(next?.instances[0]?.url, 'http://127.0.0.1:18080')
+  equal(next?.instances[0]?.name, 'deepseek-harness')
+  equal(next?.activeInstanceId, 'local-18080')
+})
+
+test('setLocalPort keeps a custom local tab name', () => {
+  const next = setLocalPort({ ...base(), instances: [{ ...base().instances[0]!, name: '工作区' }] }, 18080)
+  equal(next?.instances[0]?.name, '工作区')
+})
+
+test('setLocalPort rejects a port outside 1-65535', () => {
+  equal(setLocalPort(base(), 70000), null)
 })
 
 test('instanceLabel uses host:port for remotes and deepseek-harness for local', () => {

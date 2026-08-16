@@ -1,7 +1,7 @@
 export type VersionCheck = {
   name: string
   current: string | null
-  latest: string | null
+  latest?: string | null
   updateAvailable: boolean
 }
 
@@ -86,31 +86,40 @@ export function isNewerVersion(candidate: string, current: string): boolean {
   return false
 }
 
+export type UpdateTarget = 'app' | 'dsh' | 'both'
+
+function versionCheck(name: string, current: string | null, latest?: string | null): VersionCheck {
+  return {
+    name,
+    current,
+    latest,
+    updateAvailable: Boolean(latest && current && isNewerVersion(latest, current)),
+  }
+}
+
 export async function checkUpdates(input: {
   appCurrent: string
   dshCurrent: string | null
   fetchLatest: (packageName: string) => Promise<string | null>
+  target?: UpdateTarget
 }): Promise<UpdateReport> {
+  const target = input.target ?? 'both'
   const [appLatest, dshLatest] = await Promise.all([
-    input.fetchLatest('dsh-desktop'),
-    input.fetchLatest('@deepseek-ai/dsh'),
+    target === 'dsh' ? Promise.resolve(undefined) : input.fetchLatest('dsh-desktop'),
+    target === 'app' ? Promise.resolve(undefined) : input.fetchLatest('@deepseek-ai/dsh'),
   ])
 
   return {
-    app: {
-      name: 'dsh-desktop',
-      current: input.appCurrent,
-      latest: appLatest,
-      updateAvailable: Boolean(appLatest && isNewerVersion(appLatest, input.appCurrent)),
-    },
-    dsh: {
-      name: '@deepseek-ai/dsh',
-      current: input.dshCurrent,
-      latest: dshLatest,
-      updateAvailable: Boolean(
-        dshLatest && input.dshCurrent && isNewerVersion(dshLatest, input.dshCurrent),
-      ),
-    },
+    app: versionCheck(
+      'dsh-desktop',
+      input.appCurrent,
+      appLatest === undefined ? undefined : appLatest,
+    ),
+    dsh: versionCheck(
+      '@deepseek-ai/dsh',
+      input.dshCurrent,
+      dshLatest === undefined ? undefined : dshLatest,
+    ),
   }
 }
 

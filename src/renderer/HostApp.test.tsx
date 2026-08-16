@@ -37,6 +37,7 @@ function shellState(overrides: Partial<ShellState> = {}): ShellState {
     starting: false,
     settingsOpen: false,
     openAtLogin: false,
+    autoStart: false,
     appVersion: '0.1.0',
     dshVersion: '0.2.0',
     ...overrides,
@@ -44,16 +45,22 @@ function shellState(overrides: Partial<ShellState> = {}): ShellState {
 }
 
 function makeApi(overrides: Partial<DshShellApi> = {}) {
-  const installed: string[] = []
+  const installed: Array<{ id: string; port?: number }> = []
+  const savedPorts: number[] = []
   const selected: string[] = []
   const api: DshShellApi = {
     getState: async () => shellState(),
     detect: async () => shellState(),
-    install: async (id) => {
-      installed.push(id)
+    install: async (id, input) => {
+      installed.push({ id, port: input?.localPort })
       return shellState()
     },
+    saveLocalPort: async (input) => {
+      savedPorts.push(input.localPort)
+      return shellState({ localPort: input.localPort })
+    },
     stop: async () => shellState({ detected: false, url: null, sourceKind: 'none' }),
+    disconnect: async () => shellState({ detected: false, url: null, sourceKind: 'none' }),
     selectInstance: async (id) => {
       selected.push(id)
       return shellState({ activeInstanceId: id })
@@ -67,9 +74,15 @@ function makeApi(overrides: Partial<DshShellApi> = {}) {
     releaseOverlay: async () => undefined,
     popupInstanceMenu: async () => null,
     saveHost: async () => true,
-    checkUpdates: async () => ({
-      app: { name: 'dsh-desktop', current: '0.1.0', latest: '0.1.0', updateAvailable: false },
-      dsh: { name: '@deepseek-ai/dsh', current: '0.2.0', latest: '0.2.0', updateAvailable: false },
+    checkUpdates: async (target = 'both') => ({
+      app:
+        target === 'dsh'
+          ? { name: 'dsh-desktop', current: '0.1.0', updateAvailable: false }
+          : { name: 'dsh-desktop', current: '0.1.0', latest: '0.1.0', updateAvailable: false },
+      dsh:
+        target === 'app'
+          ? { name: '@deepseek-ai/dsh', current: '0.2.0', updateAvailable: false }
+          : { name: '@deepseek-ai/dsh', current: '0.2.0', latest: '0.2.0', updateAvailable: false },
     }),
     openUserData: async () => undefined,
     setTheme: async () => undefined,
@@ -79,7 +92,7 @@ function makeApi(overrides: Partial<DshShellApi> = {}) {
     onUpdatesResult: () => () => undefined,
     ...overrides,
   }
-  return { api, installed, selected }
+  return { api, installed, savedPorts, selected }
 }
 
 describe('HostApp', () => {
@@ -93,14 +106,14 @@ describe('HostApp', () => {
     expect(screen.getByText(/127\.0\.0\.1:18080/)).toBeInTheDocument()
     expect(screen.getByText(/首次使用请先去设置里选择启动命令并确认/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '前往设置' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '确认并启动' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '启动' })).not.toBeInTheDocument()
     expect(installed).toEqual([])
   })
 
   test('settings lists package managers and confirming start calls the api', async () => {
     const user = userEvent.setup()
     const closed: string[] = []
-    const { api, installed } = makeApi({
+    const { api, installed, savedPorts } = makeApi({
       getState: async () => shellState({ lastPackageManager: null }),
       closeSettings: async () => {
         closed.push('close')
@@ -110,24 +123,65 @@ describe('HostApp', () => {
 
     await user.click(await screen.findByRole('button', { name: '前往设置' }))
     expect(await screen.findByLabelText('pnpm')).toBeChecked()
+    expect(screen.getByText('未连接')).toBeInTheDocument()
+    expect(screen.getByLabelText('IP')).toHaveValue('127.0.0.1')
+    expect(screen.getByLabelText('连接端口')).toHaveValue('18080')
+    expect(screen.getByRole('button', { name: '连接' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '重新检测' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '启动服务' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重新连接' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('启动端口')).toHaveValue('18080')
     expect(
-      screen.getByText('pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --port 3080'),
+      screen.getByText('pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --port 18080'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '确认并启动' })).toBeEnabled()
+    const startPort = document.getElementById('startPort') as HTMLInputElement
+    await user.clear(startPort)
+    await user.type(startPort, '18081')
+    expect(
+      screen.getByText('pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --port 18081'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '启动' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '保存' })).toBeEnabled()
+    expect(screen.getByLabelText('自动启动 DeepSeek Harness')).not.toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    expect(savedPorts).toEqual([18081])
+    expect(installed).toEqual([])
 
     await user.click(screen.getByLabelText('npm / npx'))
-    await user.click(screen.getByRole('button', { name: '确认并启动' }))
+    await user.click(screen.getByRole('button', { name: '启动' }))
 
-    expect(installed).toEqual(['npm'])
+    expect(installed).toEqual([{ id: 'npm', port: 18081 }])
     expect(closed).toEqual([])
     expect(await screen.findByRole('heading', { name: '设置' })).toBeInTheDocument()
     expect(screen.queryByText('当前没有启动服务')).not.toBeInTheDocument()
   })
 
+  test('connect failure shows a toast instead of an error row', async () => {
+    const user = userEvent.setup()
+    const { api } = makeApi({
+      getState: async () => shellState({ lastPackageManager: 'pnpm' }),
+      detect: async () =>
+        shellState({
+          lastError: 'http://127.0.0.1:18080 上没有运行 DeepSeek Harness。可以启动服务。',
+        }),
+    })
+    render(<HostApp api={api} />)
+
+    await user.click(await screen.findByRole('button', { name: '前往设置' }))
+    await user.click(screen.getByRole('button', { name: '连接' }))
+
+    expect(
+      await screen.findByText('该端口没有检测到 DeepSeek Harness 服务，请在下方的启动设置中启动服务。'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('说明')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '启动服务' })).not.toBeInTheDocument()
+  })
+
   test('stays on settings with live logs while a manual start is in progress', async () => {
     const user = userEvent.setup()
-    let sendLog: ((text: string) => void) | null = null
-    let sendState: ((next: ShellState) => void) | null = null
+    let sendLog: ((text: string) => void) | undefined
+    let sendState: ((next: ShellState) => void) | undefined
     const { api } = makeApi({
       getState: async () => shellState({ lastPackageManager: null }),
       install: async () =>
@@ -146,7 +200,7 @@ describe('HostApp', () => {
     render(<HostApp api={api} />)
 
     await user.click(await screen.findByRole('button', { name: '前往设置' }))
-    await user.click(await screen.findByRole('button', { name: '确认并启动' }))
+    await user.click(await screen.findByRole('button', { name: '启动' }))
     sendState?.(shellState({ starting: true, lastPackageManager: 'pnpm' }))
     sendLog?.('$ pnpm dlx @deepseek-ai/dsh web --port 3080\nDownloading…\n')
 
@@ -200,6 +254,12 @@ describe('HostApp', () => {
           url: null,
           sourceKind: 'none',
         }),
+      disconnect: async () =>
+        shellState({
+          detected: false,
+          url: null,
+          sourceKind: 'none',
+        }),
     })
     render(<HostApp api={api} />)
 
@@ -212,14 +272,25 @@ describe('HostApp', () => {
     expect(screen.getByRole('tab', { name: '设置' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('heading', { name: '设置' })).toBeInTheDocument()
     expect(screen.getByText('本机已运行的服务')).toBeInTheDocument()
-    expect(screen.getByText('已保存的启动命令')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '启动 DeepSeek Harness' })).toBeInTheDocument()
+    expect(screen.getByText('已连接')).toBeInTheDocument()
+    expect(screen.getByText('http://127.0.0.1:18080')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '连接' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '切换连接' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '重新检测' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('启动端口')).toHaveValue('18080')
+    expect(screen.getByLabelText('自动启动 DeepSeek Harness')).not.toBeChecked()
     expect(screen.getByText('服务已在运行。更换启动命令后点保存，下次会用新命令拉起。')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '终止服务' })).toBeEnabled()
     expect(screen.queryByText('已检测到 Web 页面，正在打开…')).not.toBeInTheDocument()
-    expect(screen.getByText('当前版本 0.1.0')).toBeInTheDocument()
-    expect(screen.getByText('当前版本 0.2.0')).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: '检查更新' })).toHaveLength(2)
+    expect(screen.getByText('0.1.0')).toBeInTheDocument()
+    expect(screen.getByText('0.2.0')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '检查更新' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '更新' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '检查更新' }))
+    expect(await screen.findAllByText('已是最新')).toHaveLength(2)
+    expect(screen.queryByText('未能获取最新版本')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '打开目录' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '主题：跟随系统' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '主题：跟随系统' }))
@@ -228,8 +299,13 @@ describe('HostApp', () => {
     expect(screen.queryByText('新增远程')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '添加远程' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '终止服务' }))
-    expect(await screen.findByRole('button', { name: '终止服务' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '切换连接' }))
+    expect(await screen.findByRole('button', { name: '连接' })).toBeEnabled()
+    expect(screen.getByText('未连接')).toBeInTheDocument()
+    expect(screen.getByLabelText('IP')).toHaveValue('127.0.0.1')
+    expect(screen.getByLabelText('连接端口')).toHaveValue('18080')
+    expect(screen.queryByRole('button', { name: '终止服务' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '切换连接' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'deepseek-harness' }))
     expect(closed).toEqual(['close'])

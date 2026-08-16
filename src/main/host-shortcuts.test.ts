@@ -11,35 +11,18 @@ const keyDown = {
   shift: false,
 }
 
-test('dev Cmd+R reloads the host instead of the official page', () => {
+test('Cmd+R reloads the focused view', () => {
   equal(
     hostShortcutFor({ ...keyDown, key: 'r', meta: true }, { isMac: true, isDev: true }),
-    'reload-host',
+    'reload-view',
   )
-})
-
-test('dev Cmd+Shift+R still reconnects', () => {
   equal(
     hostShortcutFor({ ...keyDown, key: 'R', meta: true, shift: true }, { isMac: true, isDev: true }),
-    'reconnect',
-  )
-})
-
-test('packaged Cmd+R reconnects and is not a page reload', () => {
-  equal(
-    hostShortcutFor({ ...keyDown, key: 'r', meta: true }, { isMac: true, isDev: false }),
-    'reconnect',
-  )
-})
-
-test('Windows Ctrl+R follows the same split', () => {
-  equal(
-    hostShortcutFor({ ...keyDown, key: 'r', control: true }, { isMac: false, isDev: true }),
-    'reload-host',
+    'reload-view',
   )
   equal(
     hostShortcutFor({ ...keyDown, key: 'r', control: true }, { isMac: false, isDev: false }),
-    'reconnect',
+    'reload-view',
   )
 })
 
