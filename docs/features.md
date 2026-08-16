@@ -194,7 +194,7 @@ pnpm dist:mac
 
 说明：
 
-- `appId`: `cn.johnhong.dsh-desktop`
+- `appId`: `cn.johnhom.dsh-desktop`
 - 图标来自本机官方页 `http://127.0.0.1:3080/favicon.svg` 的黑色鲸鱼，源文件在 `build/icon-source.svg`，打包时栅格化为 `build/icon.png`
 - 打开未签名应用：访达里右键 → 打开
 - **签名 + 公证需要 Apple Developer ID，当前不做**
