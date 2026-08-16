@@ -55,7 +55,14 @@ DeepSeek Harness is a web app you usually start with `dsh web` or `pnpm dlx`. Th
 
 ## Install
 
-Requires **macOS on Apple Silicon**. The published DMG is unsigned.
+Requires **macOS on Apple Silicon**. Download the unsigned DMG from
+[Releases](https://github.com/johnhom1024/dsh-desktop/releases).
+
+Pushing a `v*` tag (for example `v0.1.0`) runs GitHub Actions: it typechecks,
+tests, builds `dsh-desktop-<version>-arm64.dmg`, and attaches that file plus
+`SHA256SUMS.txt` to the GitHub Release.
+
+To package locally:
 
 ```bash
 pnpm install

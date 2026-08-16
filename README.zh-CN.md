@@ -55,7 +55,13 @@ DeepSeek Harness 一般是在终端里跑 `dsh web` 或 `pnpm dlx`。能用，�
 
 ## 安装
 
-目前只打 **Apple Silicon macOS** 包。发布用的 DMG **未签名**。
+目前只打 **Apple Silicon macOS** 包。未签名 DMG 从
+[Releases](https://github.com/johnhom1024/dsh-desktop/releases) 下载。
+
+推一个 `v*` tag（例如 `v0.1.0`）就会跑 GitHub Actions：先 typecheck / 测试，再打
+`dsh-desktop-<version>-arm64.dmg`，连同 `SHA256SUMS.txt` 挂到这个 tag 的 Release。
+
+本地打包：
 
 ```bash
 pnpm install

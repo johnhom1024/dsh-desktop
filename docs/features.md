@@ -188,6 +188,8 @@ pnpm dist:mac
 
 流程：`build:main`（`tsc` + 拷 renderer HTML）→ 生成 `build/icon.png` → `electron-builder --mac dmg --arm64` → 写 `release/SHA256SUMS.txt`。
 
+GitHub 上推 `v*` tag 会跑 `.github/workflows/release.yml`：在 `macos-15` 上执行同样的 `pnpm dist:mac`，再把 DMG 和 `SHA256SUMS.txt` 挂到该 tag 的 Release。不签名、不公证。`package.json` 的 `version` 应和 tag 一致（`v0.1.0` → `0.1.0`）。
+
 产物：
 
 - `release/dsh-desktop-0.1.0-arm64.dmg`（未签名、未公证，约 100MB）
