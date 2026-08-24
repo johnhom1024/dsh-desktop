@@ -6,6 +6,7 @@ directories:
   output: release
 files:
   - dist/**/*
+  - build/tray-whale*.png
   - package.json
 mac:
   category: public.app-category.developer-tools

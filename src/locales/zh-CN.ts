@@ -122,9 +122,7 @@ export const zhCN = {
   },
   tray: {
     show: '显示窗口',
-    detect: '重新检测',
     settings: '连接设置',
-    updates: '检测更新',
     quit: '退出',
     starting: '正在启动…',
     disconnected: '未连接',

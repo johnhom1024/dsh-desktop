@@ -125,9 +125,7 @@ export const en = {
   },
   tray: {
     show: 'Show window',
-    detect: 'Check again',
     settings: 'Connection settings',
-    updates: 'Check for updates',
     quit: 'Quit',
     starting: 'Starting…',
     disconnected: 'Disconnected',

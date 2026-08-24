@@ -211,17 +211,6 @@ function trayActions() {
   return {
     showMain,
     openSettings,
-    detect: () => {
-      void connectActive()
-    },
-    checkUpdates: () => {
-      openSettings()
-      void inspectUpdates().then((report) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('updatesResult', report)
-        }
-      })
-    },
     quit: () => {
       void quitApp()
     },
@@ -1148,6 +1137,16 @@ function registerIpc(): void {
       nativeTheme.themeSource = mode
     }
   })
+}
+
+// Keep the dev build isolated from an installed release copy of the app:
+// a distinct name gives it its own userData directory and therefore its own
+// single-instance lock, so both can run side by side. Must run before any
+// userData access and before requestSingleInstanceLock().
+if (!app.isPackaged) {
+  const devName = 'dsh-desktop-dev'
+  app.setName(devName)
+  app.setPath('userData', join(app.getPath('appData'), devName))
 }
 
 repairProcessPath()
