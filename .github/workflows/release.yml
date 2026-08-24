@@ -16,6 +16,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Keep DMG filename/app version in sync with the release tag without
+      # committing anything back — the stamp only lives on the runner.
+      - name: Stamp package.json version from tag
+        env:
+          TAG: ${{ github.ref_name }} # e.g. v0.1.1 or v0.2.0-rc.1
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag '$TAG' is not a valid semver"
+            exit 1
+          fi
+          npm pkg set "version=${VERSION}"
+          echo "Stamped version: ${VERSION}"
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -66,6 +81,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Keep DMG filename/app version in sync with the release tag without
+      # committing anything back — the stamp only lives on the runner.
+      - name: Stamp package.json version from tag
+        env:
+          TAG: ${{ github.ref_name }} # e.g. v0.1.1 or v0.2.0-rc.1
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag '$TAG' is not a valid semver"
+            exit 1
+          fi
+          npm pkg set "version=${VERSION}"
+          echo "Stamped version: ${VERSION}"
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -101,3 +131,42 @@ jobs:
           files: |
             release/dsh-desktop-*-x64.dmg
             release/SHA256SUMS-x64.txt
+
+  # Runs once after both builds succeed. Records the released version as a
+  # regular commit on main so package.json tracks reality without manual
+  # bumps. Safe from loops: pushes made with GITHUB_TOKEN never trigger
+  # workflows, and beta/* builds never land here (they are tag-less pushes
+  # handled by beta-release.yml, whose tags are created by GITHUB_TOKEN).
+  bump-main:
+    name: Record released version on main
+    needs: [mac-arm64, mac-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Commit version bump
+        env:
+          TAG: ${{ github.ref_name }} # e.g. v0.1.1
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag '$TAG' is not a valid semver"
+            exit 1
+          fi
+          npm pkg set "version=${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          if git diff --cached --quiet; then
+            echo "package.json already at ${VERSION}; nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore(release): v${VERSION}"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+          echo "Pushed version bump: ${VERSION}"
