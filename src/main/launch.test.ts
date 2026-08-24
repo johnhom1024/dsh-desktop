@@ -20,7 +20,7 @@ test('path-dsh spawns the binary with web --port 3080', () => {
   deepEqual(launchSpecFor({ kind: 'path-dsh', command: '/usr/local/bin/dsh' }), {
     kind: 'spawn',
     command: '/usr/local/bin/dsh',
-    args: ['web', '--port', '3080'],
+    args: ['web', '--no-open', '--port', '3080'],
   })
 })
 
@@ -28,7 +28,7 @@ test('launchSpecFor uses a custom local port', () => {
   deepEqual(launchSpecFor({ kind: 'path-dsh', command: '/usr/local/bin/dsh' }, undefined, 18080), {
     kind: 'spawn',
     command: '/usr/local/bin/dsh',
-    args: ['web', '--port', '18080'],
+    args: ['web', '--no-open', '--port', '18080'],
   })
 })
 
@@ -49,7 +49,7 @@ test('pnpm-dlx launches via pnpm dlx instead of Electron execPath', () => {
   deepEqual(spec, {
     kind: 'spawn',
     command: '/opt/homebrew/bin/pnpm',
-    args: ['--config.dangerouslyAllowAllBuilds=true', 'dlx', '@deepseek-ai/dsh', 'web', '--port', '3080'],
+    args: ['--config.dangerouslyAllowAllBuilds=true', 'dlx', '@deepseek-ai/dsh', 'web', '--no-open', '--port', '3080'],
   })
 })
 
@@ -66,7 +66,7 @@ test('npx-cache launches via npx instead of Electron execPath', () => {
   deepEqual(spec, {
     kind: 'spawn',
     command: '/usr/local/bin/npx',
-    args: ['-y', '@deepseek-ai/dsh', 'web', '--port', '3080'],
+    args: ['-y', '@deepseek-ai/dsh', 'web', '--no-open', '--port', '3080'],
   })
 })
 
@@ -95,7 +95,7 @@ test('bundled package runs the package bin with a Node executable, not Electron'
   equal(spec.kind, 'spawn')
   if (spec.kind === 'spawn') {
     equal(spec.command.includes('Electron'), false)
-    deepEqual(spec.args, [join(packageRoot, 'lib/bin.js'), 'web', '--port', '3080'])
+    deepEqual(spec.args, [join(packageRoot, 'lib/bin.js'), 'web', '--no-open', '--port', '3080'])
   }
 })
 
