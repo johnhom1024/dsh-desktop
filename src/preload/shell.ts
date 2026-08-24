@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('dshShell', {
     ipcRenderer.invoke('shellDetect', input),
   install: (id: PackageManagerOption['id'], input?: { localPort?: number }): Promise<ShellState> =>
     ipcRenderer.invoke('shellInstall', id, input),
+  updateDsh: (): Promise<ShellState> => ipcRenderer.invoke('shellUpdateDsh'),
   saveLocalPort: (input: { localPort: number }): Promise<ShellState> =>
     ipcRenderer.invoke('shellSaveLocalPort', input),
   stop: (): Promise<ShellState> => ipcRenderer.invoke('shellStop'),

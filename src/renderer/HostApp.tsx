@@ -161,6 +161,7 @@ function HostAppInner({ api }: HostAppProps) {
   const [updateReport, setUpdateReport] = useState<UpdateReport | null>(null)
   const [checkingApp, setCheckingApp] = useState(false)
   const [checkingDsh, setCheckingDsh] = useState(false)
+  const [updatingDsh, setUpdatingDsh] = useState(false)
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme(window.localStorage))
   const [renaming, setRenaming] = useState<Instance | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -414,6 +415,32 @@ function HostAppInner({ api }: HostAppProps) {
     } finally {
       setCheckingApp(false)
       setCheckingDsh(false)
+    }
+  }
+
+  async function updateDshNow() {
+    if (updatingDsh || busy || starting) {
+      return
+    }
+    setUpdatingDsh(true)
+    stayInSettingsWhileStartingRef.current = true
+    stickLogToBottomRef.current = true
+    setLog('')
+    setStatus(t('status.updatingDsh'))
+    setStatusError(false)
+    try {
+      const next = await api.updateDsh()
+      await applyState(next)
+      if (!next.lastError) {
+        await refreshUpdates('dsh')
+        showToast(t('updates.updated'))
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+      setStatusError(true)
+    } finally {
+      setUpdatingDsh(false)
+      stayInSettingsWhileStartingRef.current = false
     }
   }
 
@@ -960,12 +987,22 @@ function HostAppInner({ api }: HostAppProps) {
                         id="updateDsh"
                         type="button"
                         size="sm"
+                        disabled={updatingDsh || busy || starting}
                         onClick={() => {
-                          void refreshUpdates('dsh')
+                          void updateDshNow()
                         }}
                       >
-                        {t('common.update')}
+                        {updatingDsh ? (
+                          <>
+                            <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+                            {t('updates.updating')}
+                          </>
+                        ) : (
+                          t('common.update')
+                        )}
                       </Button>
+                    ) : updatingDsh ? (
+                      <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
                     ) : null}
                   </div>
                 </div>

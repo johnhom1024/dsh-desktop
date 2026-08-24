@@ -23,8 +23,10 @@ import { removeInstance, renameInstance, selectInstance, setLocalPort, upsertIns
 import { TAB_BAR_HEIGHT, layoutActiveView, shouldShowInstanceView } from './instance-views.js'
 import { launchSpecFor } from './launch.js'
 import {
+  DSH_PACKAGE,
   detectPackageManagers,
   lookupOnPath,
+  previewFor,
   type PackageManagerId,
   type PackageManagerOption,
 } from './package-managers.js'
@@ -716,7 +718,7 @@ async function showLocalUrl(url: string): Promise<void> {
   showInstanceView(local.id, url)
 }
 
-async function installWithManager(id: PackageManagerId): Promise<ShellState> {
+async function installWithManager(id: PackageManagerId, opts?: { latest?: boolean }): Promise<ShellState> {
   const settings = loadSettings(userData())
   const port = localPortFromSettings(settings)
   const managers = await detectPackageManagers(lookupOnPath, port)
@@ -734,26 +736,34 @@ async function installWithManager(id: PackageManagerId): Promise<ShellState> {
 
   const reuseUrl = localWebUrl(port)
   if (await probeHarnessWeb(reuseUrl)) {
-    currentSource = { kind: 'reuse-local', url: reuseUrl }
-    starting = false
-    await showLocalUrl(reuseUrl)
-    refreshTray()
-    await pushState()
-    return shellState()
+    if (opts?.latest) {
+      // Updating: never reuse the running (old) service; restart it below.
+      await stopLocalService()
+    } else {
+      currentSource = { kind: 'reuse-local', url: reuseUrl }
+      starting = false
+      await showLocalUrl(reuseUrl)
+      refreshTray()
+      await pushState()
+      return shellState()
+    }
   }
+
+  const args = opts?.latest ? harnessWebArgsWithLatest(chosen.args) : chosen.args
+  const preview = previewFor(chosen.commandPath, args)
 
   await stopOwnedHarness()
   starting = true
-  emitInstallLog(`$ ${chosen.preview}\n`)
+  emitInstallLog(`$ ${preview}\n`)
   refreshTray()
   await pushState()
 
   try {
     const started = await startHarnessWeb({
       command: chosen.commandPath,
-      args: chosen.args,
+      args,
       probe: probeHarnessWeb,
-      timeoutMs: 120_000,
+      timeoutMs: opts?.latest ? 300_000 : 120_000,
       onOutput: emitInstallLog,
     })
     stopHarness = started.stop
@@ -773,6 +783,12 @@ async function installWithManager(id: PackageManagerId): Promise<ShellState> {
 
   await pushState()
   return shellState()
+}
+
+// dlx/npx cache the resolved version. Re-target @deepseek-ai/dsh to
+// @deepseek-ai/dsh@latest so the next launch pulls the new release.
+function harnessWebArgsWithLatest(args: string[]): string[] {
+  return args.map((item) => (item === DSH_PACKAGE ? `${DSH_PACKAGE}@latest` : item))
 }
 
 function ensureMainWindow(): BrowserWindow {
@@ -954,6 +970,21 @@ function registerIpc(): void {
       return shellState()
     }
     return installWithManager(id)
+  })
+
+  ipcMain.handle('shellUpdateDsh', async () => {
+    const settings = loadSettings(userData())
+    const managers = await detectPackageManagers(lookupOnPath, localPortFromSettings(settings))
+    const id =
+      settings.lastPackageManager && managers.some((item) => item.id === settings.lastPackageManager)
+        ? settings.lastPackageManager
+        : managers[0]?.id
+    if (!id) {
+      lastError = { code: 'error.managerMissing' }
+      await pushState()
+      return shellState()
+    }
+    return installWithManager(id, { latest: true })
   })
 
   ipcMain.handle('shellStop', async () => {

@@ -121,7 +121,7 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 
 ---
 
-## 7. 版本检测（只检查，不下载安装）
+## 7. 版本检测与更新（dsh 一键更新，壳只检查）
 
 入口：设置页「检测更新」、托盘、应用菜单。
 
@@ -130,7 +130,7 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 | `@deepseek-ai/dsh` | npm `latest`，与 PATH / pnpm dlx 缓存 / npx 缓存 / 已连接页面里读到的当前版本比（含 rc） |
 | `dsh-desktop` 壳本身 | 仅当环境变量 `DSH_DESKTOP_GITHUB_REPO=owner/repo` 有值时，查该仓库 latest release tag |
 
-设置页每行左边是项目名，右边是当前版本。区块右下角一个「检查更新」会同时查两项。发现新版本时，对应行右侧再出现「更新」按钮（当前仍只复查版本，不自动安装）。`dsh-desktop` 没发到 npm，未设置上述变量时只显示当前应用版本，不会误报有新包。拉不到 latest 时 `updateAvailable` 为 false。不做 `electron-updater` 自动下载。
+设置页每行左边是项目名，右边是当前版本。区块右下角一个「检查更新」会同时查两项。发现新版本时，对应行右侧再出现「更新」按钮。dsh 行的「更新」会：停掉当前本机服务 → 用上次选择的包管理器以 `@deepseek-ai/dsh@latest` 重新拉起（绕过 dlx/npx 的版本缓存）→ 起来后自动复查版本；期间按钮显示加载动画，启动日志实时显示在设置页下方。`dsh-desktop` 壳本身的「更新」仍只复查版本（壳更新需要重新下载安装包，不做 `electron-updater` 自动下载）。`dsh-desktop` 没发到 npm，未设置上述变量时只显示当前应用版本，不会误报有新包。拉不到 latest 时 `updateAvailable` 为 false。
 
 ---
 

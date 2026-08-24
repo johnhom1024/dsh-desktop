@@ -56,6 +56,7 @@ export const en = {
     connecting: 'Connecting…',
     savingPort: 'Saving the start port…',
     installing: 'Running the command. Start logs will appear below…',
+    updatingDsh: 'Updating DeepSeek Harness. It will restart on the new version…',
     stalePreload: 'This window is using an old preload script. Quit completely and run pnpm dev again.',
     missingApi: 'The host API is not ready. Please restart the app.',
   },
@@ -104,7 +105,8 @@ export const en = {
     openAtLogin: 'Open at login',
     openAtLoginHint: 'Start this app when you log in and keep it running in the background.',
     updates: 'Updates',
-    updatesHint: 'Checks versions only. Nothing is installed automatically.',
+    updatesHint:
+      'Checks versions. DeepSeek Harness can update and restart in one click; the shell itself must be downloaded manually.',
     checking: 'Checking…',
     checkUpdates: 'Check for updates',
     data: 'Data',
@@ -118,6 +120,8 @@ export const en = {
     latestFailed: 'Could not fetch the latest version',
     available: 'Update available: {{latest}}',
     current: 'Up to date',
+    updating: 'Updating…',
+    updated: 'DeepSeek Harness updated and restarted.',
   },
   tray: {
     show: 'Show window',

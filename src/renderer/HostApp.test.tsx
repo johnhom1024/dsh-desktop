@@ -57,6 +57,7 @@ function makeApi(overrides: Partial<DshShellApi> = {}) {
       installed.push({ id, port: input?.localPort })
       return shellState()
     },
+    updateDsh: async () => shellState(),
     saveLocalPort: async (input) => {
       savedPorts.push(input.localPort)
       return shellState({ localPort: input.localPort })
@@ -318,6 +319,30 @@ describe('HostApp', () => {
     await user.click(screen.getByRole('tab', { name: 'deepseek-harness' }))
     expect(closed).toEqual(['close'])
     expect(screen.queryByRole('heading', { name: '设置' })).not.toBeInTheDocument()
+  })
+
+  test('updates dsh when a newer version is available', async () => {
+    const user = userEvent.setup()
+    const updates: string[] = []
+    const { api } = makeApi({
+      checkUpdates: async () => ({
+        app: { name: 'dsh-desktop', current: '0.1.0', latest: '0.1.0', updateAvailable: false },
+        dsh: { name: '@deepseek-ai/dsh', current: '0.2.0', latest: '0.3.0', updateAvailable: true },
+      }),
+      updateDsh: async () => {
+        updates.push('updateDsh')
+        return shellState()
+      },
+    })
+    render(<HostApp api={api} />)
+
+    await user.click(screen.getByRole('tab', { name: '设置' }))
+    await user.click(screen.getByRole('button', { name: '检查更新' }))
+    expect(await screen.findByText('可更新至 0.3.0')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '更新' }))
+    expect(updates).toEqual(['updateDsh'])
+    expect(await screen.findByRole('button', { name: '检查更新' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '更新' })).toBeEnabled()
   })
 
   test('renames an instance tab from the overflow menu', async () => {
