@@ -1,10 +1,13 @@
 import { existsSync } from 'node:fs'
 import { BrowserWindow, app, nativeImage, shell, type WebContents } from 'electron'
 import { clampWindowBounds, type WindowBounds } from './host-state.js'
-import { desktopIconFile, resolveDesktopIconFile } from './paths.js'
+import { desktopIconFile, devIconFile, resolveDesktopIconFile } from './paths.js'
 
 export function loadDesktopIcon(): Electron.NativeImage | undefined {
-  const file = resolveDesktopIconFile(existsSync, [desktopIconFile()])
+  // Dev builds use a badged icon so they are distinguishable from the
+  // installed release app in the Dock and app switcher.
+  const candidates = app.isPackaged ? [desktopIconFile()] : [devIconFile(), desktopIconFile()]
+  const file = resolveDesktopIconFile(existsSync, candidates)
   if (!file) {
     return undefined
   }
@@ -53,7 +56,7 @@ export function createMainWindow(opts: {
     y: bounds?.y,
     show: false,
     backgroundColor: '#eef1f4',
-    title: 'dsh-desktop',
+    title: app.isPackaged ? 'dsh-desktop' : 'dsh-desktop (Dev)',
     icon: loadDesktopIcon(),
     webPreferences: {
       preload: opts.preloadPath,
