@@ -34,7 +34,9 @@ const CANDIDATES: Array<{
 ]
 
 export function harnessWebArgs(prefix: string[] = [], port: number = DEFAULT_LOCAL_PORT): string[] {
-  return [...prefix, 'web', '--port', String(port)]
+  // The desktop host loads the URL itself in a WebContentsView; stop the
+  // child `dsh web` process from also handing the URL to the default browser.
+  return [...prefix, 'web', '--no-open', '--port', String(port)]
 }
 
 export function previewFor(commandPath: string, args: string[]): string {
