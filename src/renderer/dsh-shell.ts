@@ -43,6 +43,7 @@ export type DshShellApi = {
   popupInstanceMenu: (input: { instanceId: string }) => Promise<'rename' | 'reload' | 'open-external' | null>
   saveHost: (input: { openAtLogin?: boolean; autoStart?: boolean; locale?: LocalePreference }) => Promise<boolean>
   checkUpdates: (target?: 'app' | 'dsh' | 'both') => Promise<UpdateReport>
+  getInstallLog?: () => Promise<string>
   openUserData: () => Promise<void>
   setTheme: (mode: 'light' | 'dark' | 'system') => Promise<void>
   onInstallLog: (listener: (text: string) => void) => () => void

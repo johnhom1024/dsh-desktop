@@ -369,6 +369,17 @@ function HostAppInner({ api }: HostAppProps) {
     const stopUpdates = api.onUpdatesResult((report) => {
       setUpdateReport(report)
     })
+    // Replay startup output that was emitted before this renderer mounted.
+    if (api.getInstallLog) {
+      void api
+        .getInstallLog()
+        .then((backlog) => {
+          if (backlog) {
+            setLog((current) => (current ? `${backlog}${current}` : backlog))
+          }
+        })
+        .catch(() => undefined)
+    }
     void api.getState().then((next) => applyState(next)).catch((error) => {
       setStatus(error instanceof Error ? error.message : String(error))
       setStatusError(true)

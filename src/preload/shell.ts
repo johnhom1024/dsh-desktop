@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('dshShell', {
     ipcRenderer.invoke('shellSaveHost', input),
   checkUpdates: (target?: 'app' | 'dsh' | 'both'): Promise<UpdateReport> =>
     ipcRenderer.invoke('settingsCheckUpdates', target),
+  getInstallLog: (): Promise<string> => ipcRenderer.invoke('shellGetInstallLog'),
   openUserData: (): Promise<void> => ipcRenderer.invoke('shellOpenUserData'),
   setTheme: (mode: 'light' | 'dark' | 'system'): Promise<void> =>
     ipcRenderer.invoke('shellSetTheme', mode),

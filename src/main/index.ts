@@ -95,8 +95,18 @@ function logWeb(text: string): void {
   appendHostLog(userData(), 'web.log', text)
 }
 
+// Ring buffer of recent install/startup log output. The renderer may not have
+// mounted (or even loaded) when early startup output arrives — especially on
+// first autoStart — so keep the tail and replay it when the renderer asks.
+const INSTALL_LOG_TAIL_LIMIT = 400
+let installLogTail: string[] = []
+
 function emitInstallLog(text: string): void {
   logWeb(text)
+  installLogTail.push(text)
+  if (installLogTail.length > INSTALL_LOG_TAIL_LIMIT) {
+    installLogTail = installLogTail.slice(installLogTail.length - INSTALL_LOG_TAIL_LIMIT)
+  }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('shellInstallLog', text)
   }
@@ -938,6 +948,8 @@ function registerMenu(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('shellGetInstallLog', () => installLogTail.join(''))
+
   ipcMain.handle('settingsCheckUpdates', (_event, target?: unknown) =>
     inspectUpdates(target === 'app' || target === 'dsh' ? target : 'both'),
   )

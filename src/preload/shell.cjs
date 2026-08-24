@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('dshShell', {
   popupInstanceMenu: (input) => ipcRenderer.invoke('shellPopupInstanceMenu', input),
   saveHost: (input) => ipcRenderer.invoke('shellSaveHost', input),
   checkUpdates: (target) => ipcRenderer.invoke('settingsCheckUpdates', target),
+  updateDsh: () => ipcRenderer.invoke('shellUpdateDsh'),
+  getInstallLog: () => ipcRenderer.invoke('shellGetInstallLog'),
   openUserData: () => ipcRenderer.invoke('shellOpenUserData'),
   setTheme: (mode) => ipcRenderer.invoke('shellSetTheme', mode),
   onInstallLog: (listener) => {
