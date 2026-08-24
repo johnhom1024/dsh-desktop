@@ -40,16 +40,20 @@ jobs:
             exit 1
           fi
           PREFIX="v${BASE}-beta."
-          MAX=0
-          while read -r ref; do
-            tag="${ref#refs/tags/}"
-            tag="${tag%^{}}"
-            n="${tag#$PREFIX}"
-            if [[ "$n" =~ ^[0-9]+$ ]] && (( n > MAX )); then
-              MAX=$n
-            fi
-          done < <(git ls-remote --tags origin "refs/tags/${PREFIX}*")
+          # ls-remote prints "<sha>\trefs/tags/<name>" — strip everything up to
+          # the last path segment before parsing the numeric suffix.
+          MAX=$(git ls-remote --tags origin "refs/tags/${PREFIX}*" \
+            | sed 's#.*refs/tags/##' \
+            | sed 's/\^{}$//' \
+            | grep -E "${PREFIX}[0-9]+\$" \
+            | sed "s#${PREFIX}##" \
+            | sort -n | tail -1)
+          MAX=${MAX:-0}
           NEXT="${BASE}-beta.$((MAX + 1))"
+          if git ls-remote --exit-code --tags origin "refs/tags/v${NEXT}" >/dev/null 2>&1; then
+            echo "::error::tag v${NEXT} already exists — refusing to overwrite its release"
+            exit 1
+          fi
           npm pkg set "version=${NEXT}"
           echo "VERSION=${NEXT}" >> "$GITHUB_ENV"
           echo "Resolved beta version: ${NEXT} (previous max suffix: ${MAX})"
