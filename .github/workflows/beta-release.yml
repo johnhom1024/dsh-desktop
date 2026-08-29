@@ -98,6 +98,24 @@ jobs:
           draft: false
           prerelease: true
           generate_release_notes: true
+          body: |
+            ## macOS 安装提示
+
+            本应用未做 Apple 代码签名与公证，首次打开会被 Gatekeeper 拦截（提示"已损坏，无法打开"或"无法验证开发者"）。
+
+            安装后请任选其一放行：
+
+            **方式一：终端命令（推荐）**
+
+            ```bash
+            sudo xattr -r -d com.apple.quarantine /Applications/dsh-desktop.app
+            ```
+
+            **方式二：右键打开**
+
+            在"应用程序"里右键点击 dsh-desktop →「打开」→ 再点「打开」。
+
+            > 每次安装新版本都需要重新执行一次，因为隔离属性是针对每个新下载的文件打的。
           files: |
             release/dsh-desktop-*-arm64.dmg
             release/SHA256SUMS-arm64.txt
