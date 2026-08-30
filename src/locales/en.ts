@@ -53,6 +53,7 @@ export const en = {
     switching: 'Switching connection…',
     detectingAgain: 'Checking again…',
     stopping: 'Stopping the local DeepSeek Harness…',
+    restarting: 'Restarting DeepSeek Harness. Logs will stream below…',
     connecting: 'Connecting…',
     savingPort: 'Saving the start port…',
     installing: 'Running the command. Start logs will appear below…',
@@ -92,6 +93,7 @@ export const en = {
     switchConnection: 'Switch connection',
     detect: 'Check again',
     stop: 'Stop service',
+    restart: 'Restart service',
     connectPort: 'Connect port',
     launchTitle: 'Start DeepSeek Harness',
     launchHint:

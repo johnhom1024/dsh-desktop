@@ -31,6 +31,7 @@ export type DshShellApi = {
   updateDsh: () => Promise<ShellState>
   saveLocalPort: (input: { localPort: number }) => Promise<ShellState>
   stop?: () => Promise<ShellState>
+  restart?: () => Promise<ShellState>
   disconnect?: () => Promise<ShellState>
   selectInstance: (id: string) => Promise<ShellState>
   addInstance: (input: { name: string; kind: 'local' | 'remote'; url: string }) => Promise<ShellState>
