@@ -619,6 +619,28 @@ function HostAppInner({ api }: HostAppProps) {
                     ) : null}
                   </div>
                   <div className="flex justify-end gap-2 border-t px-5 py-3">
+                    {state?.sourceKind !== 'remote' ? (
+                      <Button
+                        id="restart-service"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy || starting || typeof api.restart !== 'function'}
+                        onClick={() => {
+                          if (typeof api.restart !== 'function') {
+                            setStatus(t('status.stalePreload'))
+                            setStatusError(true)
+                            return
+                          }
+                          stayInSettingsWhileStartingRef.current = true
+                          stickLogToBottomRef.current = true
+                          setLog('')
+                          void run(t('status.restarting'), () => api.restart!())
+                        }}
+                      >
+                        {t('settings.restart')}
+                      </Button>
+                    ) : null}
                     <Button
                       id="switch-connection"
                       type="button"

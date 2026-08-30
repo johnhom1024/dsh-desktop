@@ -63,6 +63,7 @@ function makeApi(overrides: Partial<DshShellApi> = {}) {
       return shellState({ localPort: input.localPort })
     },
     stop: async () => shellState({ detected: false, url: null, sourceKind: 'none' }),
+    restart: async () => shellState({ detected: true, url: 'http://127.0.0.1:18080', sourceKind: 'reuse-local' }),
     disconnect: async () => shellState({ detected: false, url: null, sourceKind: 'none' }),
     selectInstance: async (id) => {
       selected.push(id)
@@ -319,6 +320,66 @@ describe('HostApp', () => {
     await user.click(screen.getByRole('tab', { name: 'deepseek-harness' }))
     expect(closed).toEqual(['close'])
     expect(screen.queryByRole('heading', { name: '设置' })).not.toBeInTheDocument()
+  })
+
+  test('restarts the local service from the connection card when connected', async () => {
+    const user = userEvent.setup()
+    const restarts: string[] = []
+    const { api } = makeApi({
+      getState: async () =>
+        shellState({
+          detected: true,
+          url: 'http://127.0.0.1:18080',
+          sourceKind: 'reuse-local',
+        }),
+      restart: async () => {
+        restarts.push('restart')
+        return shellState({
+          detected: true,
+          url: 'http://127.0.0.1:18080',
+          sourceKind: 'reuse-local',
+        })
+      },
+    })
+    render(<HostApp api={api} />)
+
+    await user.click(await screen.findByRole('tab', { name: '设置' }))
+    expect(screen.getByText('已连接')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重启服务' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '终止服务' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: '重启服务' }))
+    expect(restarts).toEqual(['restart'])
+    // Once the restarted service is ready, the settings page closes automatically.
+    expect(await screen.findByRole('tab', { name: 'deepseek-harness' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('hides restart for a remote connection', async () => {
+    const user = userEvent.setup()
+    const restarts: string[] = []
+    const { api } = makeApi({
+      getState: async () =>
+        shellState({
+          detected: true,
+          url: 'http://192.168.31.229:3080',
+          sourceKind: 'remote',
+          instances: [
+            { id: 'local-18080', name: 'deepseek-harness', kind: 'local', url: 'http://127.0.0.1:18080' },
+            { id: 'remote-1', name: 'NAS', kind: 'remote', url: 'http://192.168.31.229:3080' },
+          ],
+          activeInstanceId: 'remote-1',
+        }),
+      restart: async () => {
+        restarts.push('restart')
+        return shellState()
+      },
+    })
+    render(<HostApp api={api} />)
+
+    await user.click(await screen.findByRole('tab', { name: '设置' }))
+    expect(screen.getByText('远程服务')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重启服务' })).not.toBeInTheDocument()
+    expect(restarts).toEqual([])
   })
 
   test('updates dsh when a newer version is available', async () => {
