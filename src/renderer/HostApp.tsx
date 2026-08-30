@@ -36,6 +36,12 @@ type HostAppProps = {
 
 const SETTINGS_TAB_ID = 'settings'
 
+// On macOS the native title bar is hidden (titleBarStyle: 'hiddenInset') and
+// the traffic-light buttons overlay the left side of the 44px host tab bar.
+// Leave room for them so the first tab is not covered.
+const IS_MAC =
+  typeof navigator !== 'undefined' && /Macintosh|Mac OS X/i.test(navigator.userAgent)
+
 function isPackageManagerId(value: string | null | undefined): value is PackageManagerId {
   return value === 'pnpm' || value === 'npm' || value === 'yarn' || value === 'bun'
 }
@@ -476,7 +482,13 @@ function HostAppInner({ api }: HostAppProps) {
 
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
-      <div id="chrome" className="flex h-11 shrink-0 items-center gap-2 border-b bg-muted/60 px-2">
+      <div
+        id="chrome"
+        className={cn(
+          'flex h-11 shrink-0 items-center gap-2 border-b bg-muted/60 px-2',
+          IS_MAC && 'pl-[78px]',
+        )}
+      >
         <div id="tabs" role="tablist" className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
           <button
             id="settings"

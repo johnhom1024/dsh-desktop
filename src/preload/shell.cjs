@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('dshShell', {
   install: (id, input) => ipcRenderer.invoke('shellInstall', id, input),
   saveLocalPort: (input) => ipcRenderer.invoke('shellSaveLocalPort', input),
   stop: () => ipcRenderer.invoke('shellStop'),
+  restart: () => ipcRenderer.invoke('shellRestart'),
   disconnect: () => ipcRenderer.invoke('shellDisconnect'),
   selectInstance: (id) => ipcRenderer.invoke('shellSelectInstance', id),
   addInstance: (input) => ipcRenderer.invoke('shellAddInstance', input),
