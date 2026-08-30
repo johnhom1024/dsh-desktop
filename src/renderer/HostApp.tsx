@@ -487,7 +487,7 @@ function HostAppInner({ api }: HostAppProps) {
         id="chrome"
         className={cn(
           'flex h-11 shrink-0 items-center gap-2 border-b bg-muted/60 px-2',
-          IS_MAC && 'pl-[96px]',
+          IS_MAC && 'pl-[88px]',
         )}
       >
         <div id="tabs" role="tablist" className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
