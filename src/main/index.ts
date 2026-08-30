@@ -525,6 +525,29 @@ async function stopLocalService(): Promise<void> {
   await pushState()
 }
 
+// Stop the running local dsh web, then start it again with the saved launch
+// command. Mirrors the update flow (never reuses the running service).
+async function restartLocalService(): Promise<ShellState> {
+  const settings = loadSettings(userData())
+  const active = activeInstance(settings)
+  if (active?.kind === 'remote') {
+    lastError = { code: 'error.remoteDisconnected' }
+    await pushState()
+    return shellState()
+  }
+  const managers = await detectPackageManagers(lookupOnPath, localPortFromSettings(settings))
+  const id =
+    settings.lastPackageManager && managers.some((item) => item.id === settings.lastPackageManager)
+      ? settings.lastPackageManager
+      : managers[0]?.id
+  if (!id) {
+    lastError = { code: 'error.managerMissing' }
+    await pushState()
+    return shellState()
+  }
+  return installWithManager(id, { restart: true })
+}
+
 async function applySource(source: RuntimeSource): Promise<string | null> {
   currentSource = source
   if (source.kind === 'remote') {
@@ -717,7 +740,10 @@ async function showLocalUrl(url: string): Promise<void> {
   showInstanceView(local.id, url)
 }
 
-async function installWithManager(id: PackageManagerId, opts?: { latest?: boolean }): Promise<ShellState> {
+async function installWithManager(
+  id: PackageManagerId,
+  opts?: { latest?: boolean; restart?: boolean },
+): Promise<ShellState> {
   const settings = loadSettings(userData())
   const port = localPortFromSettings(settings)
   const managers = await detectPackageManagers(lookupOnPath, port)
@@ -735,8 +761,8 @@ async function installWithManager(id: PackageManagerId, opts?: { latest?: boolea
 
   const reuseUrl = localWebUrl(port)
   if (await probeHarnessWeb(reuseUrl)) {
-    if (opts?.latest) {
-      // Updating: never reuse the running (old) service; restart it below.
+    if (opts?.latest || opts?.restart) {
+      // Updating / restarting: never reuse the running service; restart it below.
       await stopLocalService()
     } else {
       currentSource = { kind: 'reuse-local', url: reuseUrl }
@@ -991,6 +1017,10 @@ function registerIpc(): void {
   ipcMain.handle('shellStop', async () => {
     await stopLocalService()
     return shellState()
+  })
+
+  ipcMain.handle('shellRestart', async () => {
+    return restartLocalService()
   })
 
   ipcMain.handle('shellDisconnect', async () => {

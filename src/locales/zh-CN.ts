@@ -53,6 +53,7 @@ export const zhCN = {
     switching: '正在切换连接…',
     detectingAgain: '正在重新检测…',
     stopping: '正在终止本机 DeepSeek Harness…',
+    restarting: '正在重启 DeepSeek Harness，日志会实时显示在下方…',
     connecting: '正在连接…',
     savingPort: '正在保存启动端口…',
     installing: '正在执行命令，启动日志会显示在下方…',
@@ -91,6 +92,7 @@ export const zhCN = {
     switchConnection: '切换连接',
     detect: '重新检测',
     stop: '终止服务',
+    restart: '重启服务',
     connectPort: '连接端口',
     launchTitle: '启动 DeepSeek Harness',
     launchHint:
