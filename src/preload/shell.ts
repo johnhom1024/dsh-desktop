@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('dshShell', {
   saveLocalPort: (input: { localPort: number }): Promise<ShellState> =>
     ipcRenderer.invoke('shellSaveLocalPort', input),
   stop: (): Promise<ShellState> => ipcRenderer.invoke('shellStop'),
+  restart: (): Promise<ShellState> => ipcRenderer.invoke('shellRestart'),
   disconnect: (): Promise<ShellState> => ipcRenderer.invoke('shellDisconnect'),
   selectInstance: (id: string): Promise<ShellState> => ipcRenderer.invoke('shellSelectInstance', id),
   addInstance: (input: { name: string; kind: 'local' | 'remote'; url: string }): Promise<ShellState> =>
