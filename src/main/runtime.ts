@@ -26,6 +26,7 @@ export type Settings = {
   locale?: 'system' | 'zh-CN' | 'en'
   lastPackageManager?: PackageManagerId
   windowBounds?: WindowBounds
+  sidebarCollapsed?: boolean
 }
 
 export type DshPackage = {

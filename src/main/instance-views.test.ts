@@ -1,10 +1,12 @@
 import { deepEqual, equal } from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  SIDEBAR_COLLAPSED_WIDTH,
   SIDEBAR_WIDTH,
   chromeContentBounds,
   layoutActiveView,
   shouldShowInstanceView,
+  sidebarWidthFor,
 } from './instance-views.js'
 
 test('chromeContentBounds places the view right of the sidebar, top to bottom', () => {
@@ -14,6 +16,20 @@ test('chromeContentBounds places the view right of the sidebar, top to bottom', 
     width: 1280 - SIDEBAR_WIDTH,
     height: 840,
   })
+})
+
+test('chromeContentBounds uses the collapsed rail width when collapsed', () => {
+  deepEqual(chromeContentBounds({ width: 1280, height: 840 }, SIDEBAR_COLLAPSED_WIDTH), {
+    x: SIDEBAR_COLLAPSED_WIDTH,
+    y: 0,
+    width: 1280 - SIDEBAR_COLLAPSED_WIDTH,
+    height: 840,
+  })
+})
+
+test('sidebarWidthFor maps state to rail width', () => {
+  equal(sidebarWidthFor(false), SIDEBAR_WIDTH)
+  equal(sidebarWidthFor(true), SIDEBAR_COLLAPSED_WIDTH)
 })
 
 test('chromeContentBounds keeps a zero-width view when the window is narrower than the sidebar', () => {

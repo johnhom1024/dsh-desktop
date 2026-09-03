@@ -1,4 +1,9 @@
-export type HostShortcut = 'reload-view' | 'open-settings' | 'toggle-devtools' | 'quit'
+export type HostShortcut =
+  | 'reload-view'
+  | 'open-settings'
+  | 'toggle-devtools'
+  | 'toggle-sidebar'
+  | 'quit'
 
 export type ShortcutInput = {
   type: string
@@ -35,6 +40,9 @@ export function hostShortcutFor(
   }
   if (key === ',') {
     return 'open-settings'
+  }
+  if (key === '\\') {
+    return 'toggle-sidebar'
   }
   if (key === 'q') {
     return 'quit'

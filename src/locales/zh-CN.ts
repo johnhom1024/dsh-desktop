@@ -18,6 +18,9 @@ export const zhCN = {
     settingsAria: '设置',
     themeAria: '主题：{{label}}',
     instanceMenu: '{{name}} 菜单',
+    toggleSidebar: '{{label}}侧边栏',
+    collapse: '收起',
+    expand: '展开',
   },
   theme: {
     light: '亮色',

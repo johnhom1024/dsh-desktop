@@ -17,6 +17,7 @@ export type ShellState = {
   lastPackageManager: string | null
   starting: boolean
   settingsOpen: boolean
+  sidebarCollapsed: boolean
   openAtLogin: boolean
   autoStart: boolean
   appVersion: string
@@ -55,6 +56,8 @@ contextBridge.exposeInMainWorld('dshShell', {
   openUserData: (): Promise<void> => ipcRenderer.invoke('shellOpenUserData'),
   setTheme: (mode: 'light' | 'dark' | 'system'): Promise<void> =>
     ipcRenderer.invoke('shellSetTheme', mode),
+  setSidebarCollapsed: (collapsed: boolean): Promise<void> =>
+    ipcRenderer.invoke('shellSetSidebarCollapsed', collapsed),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shellOpenExternal', url),
   copyToClipboard: (text: string): Promise<void> => ipcRenderer.invoke('shellCopyToClipboard', text),
   onInstallLog: (listener: (text: string) => void) => {

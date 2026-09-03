@@ -18,6 +18,9 @@ export const en = {
     settingsAria: 'Settings',
     themeAria: 'Theme: {{label}}',
     instanceMenu: '{{name}} menu',
+    toggleSidebar: '{{label}} sidebar',
+    collapse: 'Collapse',
+    expand: 'Expand',
   },
   theme: {
     light: 'Light',

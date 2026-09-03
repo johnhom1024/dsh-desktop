@@ -18,12 +18,18 @@ export type ToastItem = {
 type ToasterProps = {
   toasts: ToastItem[]
   onDismiss: (id: number) => void
+  collapsed?: boolean
 }
 
-export function Toaster({ toasts, onDismiss }: ToasterProps) {
+export function Toaster({ toasts, onDismiss, collapsed = false }: ToasterProps) {
   return (
-    <div className="pointer-events-none absolute inset-x-2 top-14 z-50 flex flex-col items-stretch gap-2">
-      <div className="flex w-full flex-col gap-2">
+    <div
+      className={cn(
+        'pointer-events-none absolute top-14 z-50 flex flex-col gap-2',
+        collapsed ? 'right-full mr-2 items-end' : 'inset-x-2 items-stretch',
+      )}
+    >
+      <div className={cn('flex flex-col gap-2', collapsed ? 'w-72' : 'w-full')}>
         {toasts.map((item) => (
           <Toast key={item.id} item={item} onDismiss={onDismiss} />
         ))}

@@ -8,6 +8,7 @@ type InstanceTabProps = {
   instance: Instance
   selected: boolean
   href?: string | null
+  collapsed?: boolean
   onSelect: (instance: Instance) => void
   onMenu: (instance: Instance) => void
 }
@@ -28,9 +29,36 @@ export function tabUrlLabel(url: string | null | undefined): string | undefined 
   }
 }
 
-export function InstanceTab({ instance, selected, href, onSelect, onMenu }: InstanceTabProps) {
+export function InstanceTab({ instance, selected, href, collapsed = false, onSelect, onMenu }: InstanceTabProps) {
   const { t } = useTranslation()
   const urlLabel = tabUrlLabel(href ?? instance.url)
+  if (collapsed) {
+    return (
+      <div
+        title={instance.name}
+        className={cn(
+          'flex h-9 w-full shrink-0 items-center rounded-lg border transition-colors',
+          selected
+            ? 'border-border bg-card text-foreground shadow-sm'
+            : 'border-transparent text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
+        )}
+      >
+        <button
+          type="button"
+          role="tab"
+          data-tab={instance.id}
+          aria-label={instance.name}
+          aria-selected={selected}
+          className="inline-flex size-full min-w-0 items-center justify-center"
+          onClick={() => {
+            onSelect(instance)
+          }}
+        >
+          <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+        </button>
+      </div>
+    )
+  }
   return (
     <div
       title={urlLabel}

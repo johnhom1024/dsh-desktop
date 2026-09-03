@@ -245,6 +245,21 @@ test('saveSettings then loadSettings round-trips lastPackageManager and window b
   })
 })
 
+test('saveSettings then loadSettings round-trips sidebarCollapsed', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
+
+  equal(
+    saveSettings(dir, {
+      instances: [LOCAL_3080],
+      activeInstanceId: 'local-3080',
+      sidebarCollapsed: true,
+    }),
+    true,
+  )
+  deepEqual(loadSettings(dir), { ...DEFAULTS, sidebarCollapsed: true })
+})
+
+
 test('saveSettings then loadSettings keeps a renamed local tab', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-settings-'))
 

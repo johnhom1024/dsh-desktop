@@ -21,7 +21,7 @@ import { startHarnessWeb, stopListeningOnPort } from './harness-process.js'
 import { appendHostLog, formatTrayStatus } from './host-state.js'
 import { instanceExternalUrl, instanceMenuItems, type InstanceMenuAction } from './instance-menu.js'
 import { removeInstance, renameInstance, selectInstance, setLocalPort, upsertInstance } from './instances.js'
-import { layoutActiveView, shouldShowInstanceView } from './instance-views.js'
+import { layoutActiveView, shouldShowInstanceView, sidebarWidthFor } from './instance-views.js'
 import { launchSpecFor } from './launch.js'
 import {
   DSH_PACKAGE,
@@ -364,6 +364,13 @@ function handleHostShortcut(action: HostShortcut, source: WebContents): void {
     toggleDevTools(source)
     return
   }
+  if (action === 'toggle-sidebar') {
+    const current = loadSettings(userData())
+    persistSettings({ ...current, sidebarCollapsed: !(current.sidebarCollapsed === true) })
+    layoutViews()
+    void pushState()
+    return
+  }
   if (action === 'quit') {
     void quitApp()
     return
@@ -419,10 +426,13 @@ function layoutViews(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
   }
-  const activeId = loadSettings(userData()).activeInstanceId
+  const settings = loadSettings(userData())
+  const activeId = settings.activeInstanceId
   const [width, height] = mainWindow.getContentSize()
   if (!officialViewBlocked()) {
-    layoutActiveView(instanceViews, currentUrl ? activeId : null, { width, height })
+    layoutActiveView(instanceViews, currentUrl ? activeId : null, { width, height }, {
+      sidebarWidth: sidebarWidthFor(settings.sidebarCollapsed === true),
+    })
   }
   for (const [id, view] of instanceViews) {
     const show = shouldShowInstanceView({
@@ -583,6 +593,7 @@ export type ShellState = {
   lastPackageManager: PackageManagerId | null
   starting: boolean
   settingsOpen: boolean
+  sidebarCollapsed: boolean
   openAtLogin: boolean
   autoStart: boolean
   appVersion: string
@@ -604,6 +615,7 @@ async function shellState(): Promise<ShellState> {
     lastPackageManager: settings.lastPackageManager ?? null,
     starting,
     settingsOpen: false,
+    sidebarCollapsed: settings.sidebarCollapsed === true,
     openAtLogin: settings.openAtLogin,
     autoStart: settings.autoStart,
     appVersion: app.getVersion(),
@@ -1174,6 +1186,17 @@ function registerIpc(): void {
     if (mode === 'light' || mode === 'dark' || mode === 'system') {
       nativeTheme.themeSource = mode
     }
+  })
+
+  ipcMain.handle('shellSetSidebarCollapsed', (_event, collapsed: unknown) => {
+    const next = collapsed === true
+    const current = loadSettings(userData())
+    if (current.sidebarCollapsed === next) {
+      return
+    }
+    persistSettings({ ...current, sidebarCollapsed: next })
+    layoutViews()
+    void pushState()
   })
 
   ipcMain.handle('shellOpenExternal', (_event, url: unknown) => {

@@ -18,6 +18,7 @@ export type ShellState = {
   lastPackageManager: string | null
   starting: boolean
   settingsOpen: boolean
+  sidebarCollapsed: boolean
   openAtLogin: boolean
   autoStart: boolean
   appVersion: string
@@ -47,6 +48,7 @@ export type DshShellApi = {
   getInstallLog?: () => Promise<string>
   openUserData: () => Promise<void>
   setTheme: (mode: 'light' | 'dark' | 'system') => Promise<void>
+  setSidebarCollapsed: (collapsed: boolean) => Promise<void>
   openExternal: (url: string) => Promise<void>
   copyToClipboard: (text: string) => Promise<void>
   onInstallLog: (listener: (text: string) => void) => () => void

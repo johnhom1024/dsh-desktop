@@ -5,6 +5,16 @@ export const TAB_BAR_HEIGHT = 44
 // edge of the window.
 export const SIDEBAR_WIDTH = 208
 
+// Collapsed rail: tabs keep only their icons (a colored dot per instance,
+// gear, theme glyph). Wide enough that the traffic-light buttons — which stay
+// put at x=16, ending at x≈69 — never collide with the toggle button below.
+export const SIDEBAR_COLLAPSED_WIDTH = 84
+
+// Helper for choosing the rail width from persisted state.
+export function sidebarWidthFor(collapsed: boolean): number {
+  return collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH
+}
+
 export type ViewBounds = {
   x: number
   y: number
@@ -29,6 +39,7 @@ export function layoutActiveView(
   views: Map<string, { setBounds: (bounds: ViewBounds) => void }>,
   activeId: string | null,
   windowBounds: { width: number; height: number },
+  opts?: { sidebarWidth?: number },
 ): void {
   if (!activeId) {
     return
@@ -37,7 +48,7 @@ export function layoutActiveView(
   if (!view) {
     return
   }
-  view.setBounds(chromeContentBounds(windowBounds))
+  view.setBounds(chromeContentBounds(windowBounds, opts?.sidebarWidth))
 }
 
 export function shouldShowInstanceView(input: {

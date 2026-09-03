@@ -1,4 +1,4 @@
-import { LoaderCircle, Monitor, Moon, Settings, Sun } from 'lucide-react'
+import { LoaderCircle, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sun } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -257,6 +257,13 @@ function HostAppInner({ api }: HostAppProps) {
     settingsOpenRef.current = true
     setSettingsOpen(true)
     void api.openSettings()
+  }
+
+  function toggleSidebar() {
+    if (typeof api.setSidebarCollapsed !== 'function') {
+      return
+    }
+    void api.setSidebarCollapsed(!(stateRef.current?.sidebarCollapsed === true))
   }
 
   function closeSettingsPage() {
@@ -542,45 +549,44 @@ function HostAppInner({ api }: HostAppProps) {
     return <p className="p-6 text-sm text-destructive">{status}</p>
   }
 
+  const collapsed = state?.sidebarCollapsed === true
+
   return (
     <div className="flex h-full bg-background text-foreground">
       <aside
         id="chrome"
+        data-collapsed={collapsed || undefined}
         className={cn(
-          'relative flex h-full w-52 shrink-0 flex-col border-r bg-muted/60',
+          'relative flex h-full shrink-0 flex-col border-r bg-muted/60 transition-[width] duration-200',
+          collapsed ? 'w-[84px]' : 'w-52',
           IS_MAC && 'pt-[44px]',
         )}
       >
+        <Button
+          id="sidebar-toggle"
+          type="button"
+          variant="ghost"
+          className="absolute right-2 top-[52px] z-10 size-7 shrink-0 p-0 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+          aria-label={t('chrome.toggleSidebar', { label: t(collapsed ? 'chrome.expand' : 'chrome.collapse') })}
+          title={t(collapsed ? 'chrome.expand' : 'chrome.collapse')}
+          onClick={toggleSidebar}
+        >
+          {collapsed ? <PanelLeftClose className="size-4" aria-hidden="true" /> : null}
+          {!collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : null}
+        </Button>
         <nav
           id="tabs"
           role="tablist"
           aria-orientation="vertical"
-          className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 py-2"
+          className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-2 pt-11"
         >
-          <button
-            id="settings"
-            type="button"
-            role="tab"
-            data-tab={SETTINGS_TAB_ID}
-            aria-label={t('chrome.settingsAria')}
-            aria-selected={settingsOpen}
-            className={cn(
-              'inline-flex h-9 w-full shrink-0 items-center gap-2 rounded-lg border px-2.5 text-sm transition-colors',
-              settingsOpen
-                ? 'border-border bg-card text-foreground shadow-sm'
-                : 'border-transparent text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
-            )}
-            onClick={openSettingsPage}
-          >
-            <Settings className="size-3.5 shrink-0" aria-hidden="true" />
-            <span className="truncate">{t('common.settings')}</span>
-          </button>
           {instances.map((item) => (
             <InstanceTab
               key={item.id}
               instance={item}
               selected={!settingsOpen && item.id === instance?.id}
               href={item.id === state?.activeInstanceId && state.url ? state.url : item.url}
+              collapsed={collapsed}
               onSelect={() => {
                 closeSettingsPage()
                 if (item.id !== state?.activeInstanceId) {
@@ -598,20 +604,42 @@ function HostAppInner({ api }: HostAppProps) {
             id="theme-toggle"
             type="button"
             variant="ghost"
-            className="h-9 w-full justify-start gap-2 px-2.5 text-sm text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+            className={cn(
+              'h-9 w-full text-sm text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
+              collapsed ? 'justify-center px-0' : 'justify-start gap-2 px-2.5',
+            )}
             aria-label={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
             title={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
             onClick={() => {
               setTheme((current) => nextTheme(current))
             }}
           >
-            {theme === 'light' ? <Sun aria-hidden="true" /> : null}
-            {theme === 'dark' ? <Moon aria-hidden="true" /> : null}
-            {theme === 'system' ? <Monitor aria-hidden="true" /> : null}
-            <span className="truncate">{t(themeLabelKey(theme))}</span>
+            {theme === 'light' ? <Sun className="size-4 shrink-0" aria-hidden="true" /> : null}
+            {theme === 'dark' ? <Moon className="size-4 shrink-0" aria-hidden="true" /> : null}
+            {theme === 'system' ? <Monitor className="size-4 shrink-0" aria-hidden="true" /> : null}
+            {!collapsed ? <span className="truncate">{t(themeLabelKey(theme))}</span> : null}
+          </Button>
+          <Button
+            id="settings"
+            type="button"
+            role="tab"
+            data-tab={SETTINGS_TAB_ID}
+            aria-label={t('chrome.settingsAria')}
+            aria-selected={settingsOpen}
+            className={cn(
+              'mt-1.5 inline-flex h-9 w-full rounded-lg border text-sm transition-colors',
+              collapsed ? 'justify-center px-0' : 'justify-start gap-2 px-2.5',
+              settingsOpen
+                ? 'border-border bg-card text-foreground shadow-sm'
+                : 'border-transparent text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
+            )}
+            onClick={openSettingsPage}
+          >
+            <Settings className="size-3.5 shrink-0" aria-hidden="true" />
+            {!collapsed ? <span className="truncate">{t('common.settings')}</span> : null}
           </Button>
         </div>
-        <Toaster toasts={toasts} onDismiss={dismissToast} />
+        <Toaster toasts={toasts} onDismiss={dismissToast} collapsed={collapsed} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

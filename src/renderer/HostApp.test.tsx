@@ -38,6 +38,7 @@ function shellState(overrides: Partial<ShellState> = {}): ShellState {
     lastPackageManager: 'pnpm',
     starting: false,
     settingsOpen: false,
+    sidebarCollapsed: false,
     openAtLogin: false,
     autoStart: false,
     appVersion: '0.1.0',
@@ -93,6 +94,7 @@ function makeApi(overrides: Partial<DshShellApi> = {}) {
     }),
     openUserData: async () => undefined,
     setTheme: async () => undefined,
+    setSidebarCollapsed: async () => undefined,
     openExternal: async (url) => {
       opened.push(url)
     },

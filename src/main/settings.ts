@@ -126,6 +126,7 @@ export type SettingsInput = {
   lastPackageManager?: unknown
   locale?: unknown
   windowBounds?: unknown
+  sidebarCollapsed?: unknown
 }
 
 function migrateFromLegacy(candidate: SettingsInput): Instance[] {
@@ -199,6 +200,10 @@ function normalize(raw: unknown): Settings {
   const bounds = parseWindowBounds(candidate.windowBounds)
   if (bounds) {
     next.windowBounds = bounds
+  }
+
+  if (typeof candidate.sidebarCollapsed === 'boolean') {
+    next.sidebarCollapsed = candidate.sidebarCollapsed
   }
 
   return next

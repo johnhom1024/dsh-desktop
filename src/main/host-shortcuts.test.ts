@@ -33,6 +33,17 @@ test('Cmd+, opens settings', () => {
   )
 })
 
+test('Cmd+\\ toggles the sidebar', () => {
+  equal(
+    hostShortcutFor({ ...keyDown, key: '\\', meta: true }, { isMac: true, isDev: true }),
+    'toggle-sidebar',
+  )
+  equal(
+    hostShortcutFor({ ...keyDown, key: '\\', control: true }, { isMac: false, isDev: false }),
+    'toggle-sidebar',
+  )
+})
+
 test('plain R and keyUp are ignored', () => {
   equal(hostShortcutFor(keyDown, { isMac: true, isDev: true }), null)
   equal(
