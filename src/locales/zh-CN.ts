@@ -121,6 +121,11 @@ export const zhCN = {
     current: '已是最新',
     updating: '更新中…',
     updated: 'DeepSeek Harness 已更新并重启。',
+    appToastTitle: 'dsh-desktop 有新版本',
+    appToastDescription: 'v{{latest}} 已发布。需要手动下载新安装包。',
+    openRelease: '打开 Release 页面',
+    copyDownload: '复制下载链接',
+    copied: '下载链接已复制到剪贴板。',
   },
   tray: {
     show: '显示窗口',

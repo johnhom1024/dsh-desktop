@@ -3,11 +3,29 @@ export type VersionCheck = {
   current: string | null
   latest?: string | null
   updateAvailable: boolean
+  /** Direct download URL for the matched asset (e.g. DMG). Null if not published. */
+  downloadUrl?: string | null
+  /** HTML URL of the release page, suitable for `openExternal`. */
+  releaseUrl?: string | null
 }
 
 export type UpdateReport = {
   app: VersionCheck
   dsh: VersionCheck
+}
+
+export type GithubReleaseAsset = {
+  name: string
+  /** Direct browser download URL. */
+  browserDownloadUrl: string
+  size: number
+  contentType: string
+}
+
+export type GithubReleaseInfo = {
+  tag: string
+  htmlUrl: string
+  assets: GithubReleaseAsset[]
 }
 
 type SemVer = {
@@ -123,23 +141,18 @@ export async function checkUpdates(input: {
   }
 }
 
-export async function fetchGithubLatestTag(repo: string): Promise<string | null> {
+async function fetchJson(url: string, accept: string): Promise<unknown | null> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 8000)
-
   try {
-    const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+    const response = await fetch(url, {
       signal: controller.signal,
-      headers: { accept: 'application/vnd.github+json', 'user-agent': 'dsh-desktop' },
+      headers: { accept, 'user-agent': 'dsh-desktop' },
     })
     if (!response.ok) {
       return null
     }
-    const body = (await response.json()) as { tag_name?: unknown }
-    if (typeof body.tag_name !== 'string') {
-      return null
-    }
-    return body.tag_name.replace(/^v/, '')
+    return (await response.json()) as unknown
   } catch {
     return null
   } finally {
@@ -147,23 +160,112 @@ export async function fetchGithubLatestTag(repo: string): Promise<string | null>
   }
 }
 
-export async function fetchNpmLatestVersion(packageName: string): Promise<string | null> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 8000)
-
-  try {
-    const response = await fetch(`https://registry.npmjs.org/${packageName}/latest`, {
-      signal: controller.signal,
-      headers: { accept: 'application/json' },
-    })
-    if (!response.ok) {
-      return null
-    }
-    const body = (await response.json()) as { version?: unknown }
-    return typeof body.version === 'string' ? body.version : null
-  } catch {
+export async function fetchGithubLatestTag(repo: string): Promise<string | null> {
+  const body = (await fetchJson(
+    `https://api.github.com/repos/${repo}/releases/latest`,
+    'application/vnd.github+json',
+  )) as { tag_name?: unknown } | null
+  if (!body || typeof body.tag_name !== 'string') {
     return null
-  } finally {
-    clearTimeout(timer)
   }
+  return body.tag_name.replace(/^v/, '')
+}
+
+export async function fetchGithubLatestRelease(repo: string): Promise<GithubReleaseInfo | null> {
+  const body = (await fetchJson(
+    `https://api.github.com/repos/${repo}/releases/latest`,
+    'application/vnd.github+json',
+  )) as
+    | {
+        tag_name?: unknown
+        html_url?: unknown
+        assets?: unknown
+      }
+    | null
+  if (!body) {
+    return null
+  }
+  if (typeof body.tag_name !== 'string' || typeof body.html_url !== 'string') {
+    return null
+  }
+  const assets = Array.isArray(body.assets)
+    ? body.assets
+        .map((item): GithubReleaseAsset | null => {
+          if (!item || typeof item !== 'object') {
+            return null
+          }
+          const obj = item as Record<string, unknown>
+          if (typeof obj.name !== 'string' || typeof obj.browser_download_url !== 'string') {
+            return null
+          }
+          return {
+            name: obj.name,
+            browserDownloadUrl: obj.browser_download_url,
+            size: typeof obj.size === 'number' ? obj.size : 0,
+            contentType: typeof obj.content_type === 'string' ? obj.content_type : '',
+          }
+        })
+        .filter((item): item is GithubReleaseAsset => item !== null)
+    : []
+  return {
+    tag: body.tag_name.replace(/^v/, ''),
+    htmlUrl: body.html_url,
+    assets,
+  }
+}
+
+const APP_ASSET_PATTERN = /^dsh-desktop-(.+)-(arm64|x64)\.dmg$/i
+
+/**
+ * Pick the DMG asset matching the current architecture. Only the explicit
+ * architecture is considered — never fall back to the other one, because
+ * downloading the wrong-arch DMG is a worse UX than showing a download link
+ * to the release page.
+ */
+export function pickAppAsset(assets: GithubReleaseAsset[], arch: NodeJS.Architecture): GithubReleaseAsset | null {
+  const target = arch === 'arm64' ? 'arm64' : 'x64'
+  for (const asset of assets) {
+    const match = asset.name.match(APP_ASSET_PATTERN)
+    if (match && match[2].toLowerCase() === target) {
+      return asset
+    }
+  }
+  return null
+}
+
+/**
+ * Augment an UpdateReport with direct download links when a release is known.
+ * The download/release fields stay null when the release is missing, when no
+ * asset matches the current arch, or when the version is not actually newer
+ * than the installed one.
+ */
+export function mergeAppRelease(
+  report: UpdateReport,
+  release: GithubReleaseInfo | null,
+  arch: NodeJS.Architecture,
+): UpdateReport {
+  if (!release) {
+    return report
+  }
+  const asset = pickAppAsset(release.assets, arch)
+  return {
+    ...report,
+    app: {
+      ...report.app,
+      latest: report.app.latest ?? release.tag,
+      downloadUrl: report.app.updateAvailable && asset ? asset.browserDownloadUrl : null,
+      releaseUrl: report.app.updateAvailable ? release.htmlUrl : null,
+    },
+  }
+}
+
+export async function fetchNpmLatestVersion(packageName: string): Promise<string | null> {
+  const body = (await fetchJson(
+    `https://registry.npmjs.org/${packageName}/latest`,
+    'application/json',
+  )) as { version?: unknown } | null
+  if (!body || typeof body.version !== 'string') {
+    return null
+  }
+  return body.version
 }

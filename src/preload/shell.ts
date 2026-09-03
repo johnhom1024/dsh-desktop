@@ -55,6 +55,8 @@ contextBridge.exposeInMainWorld('dshShell', {
   openUserData: (): Promise<void> => ipcRenderer.invoke('shellOpenUserData'),
   setTheme: (mode: 'light' | 'dark' | 'system'): Promise<void> =>
     ipcRenderer.invoke('shellSetTheme', mode),
+  openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shellOpenExternal', url),
+  copyToClipboard: (text: string): Promise<void> => ipcRenderer.invoke('shellCopyToClipboard', text),
   onInstallLog: (listener: (text: string) => void) => {
     const wrapped = (_event: unknown, text: string) => listener(text)
     ipcRenderer.on('shellInstallLog', wrapped)

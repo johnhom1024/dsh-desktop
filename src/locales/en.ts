@@ -124,6 +124,11 @@ export const en = {
     current: 'Up to date',
     updating: 'Updating…',
     updated: 'DeepSeek Harness updated and restarted.',
+    appToastTitle: 'dsh-desktop has an update',
+    appToastDescription: 'v{{latest}} is published. The new installer must be downloaded manually.',
+    openRelease: 'Open release page',
+    copyDownload: 'Copy download link',
+    copied: 'Download link copied to clipboard.',
   },
   tray: {
     show: 'Show window',

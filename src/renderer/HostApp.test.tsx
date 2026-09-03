@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { changeLanguage, ready } from '../i18n'
 import { HostApp } from './HostApp'
-import type { DshShellApi, ShellState } from './dsh-shell'
+import type { DshShellApi, ShellState, UpdateReport } from './dsh-shell'
 
 const managers = [
   {
@@ -50,6 +50,9 @@ function makeApi(overrides: Partial<DshShellApi> = {}) {
   const installed: Array<{ id: string; port?: number }> = []
   const savedPorts: number[] = []
   const selected: string[] = []
+  const updateListeners: Array<(report: UpdateReport) => void> = []
+  const opened: string[] = []
+  const copied: string[] = []
   const api: DshShellApi = {
     getState: async () => shellState(),
     detect: async () => shellState(),
@@ -90,13 +93,39 @@ function makeApi(overrides: Partial<DshShellApi> = {}) {
     }),
     openUserData: async () => undefined,
     setTheme: async () => undefined,
+    openExternal: async (url) => {
+      opened.push(url)
+    },
+    copyToClipboard: async (text) => {
+      copied.push(text)
+    },
     onInstallLog: () => () => undefined,
     onState: () => () => undefined,
     onOpenSettings: () => () => undefined,
-    onUpdatesResult: () => () => undefined,
+    onUpdatesResult: (listener) => {
+      updateListeners.push(listener)
+      return () => {
+        const index = updateListeners.indexOf(listener)
+        if (index >= 0) {
+          updateListeners.splice(index, 1)
+        }
+      }
+    },
     ...overrides,
   }
-  return { api, installed, savedPorts, selected }
+  return {
+    api,
+    installed,
+    savedPorts,
+    selected,
+    opened,
+    copied,
+    triggerUpdates: (report: UpdateReport) => {
+      for (const listener of updateListeners) {
+        listener(report)
+      }
+    },
+  }
 }
 
 describe('HostApp', () => {
@@ -446,5 +475,110 @@ describe('HostApp', () => {
     expect(await screen.findByRole('tab', { name: '工作区' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '重命名' })).not.toBeInTheDocument()
     expect(overlays).toEqual(['acquire', 'release'])
+  })
+
+  test('announces an app update with copy and open-release actions', async () => {
+    const user = userEvent.setup()
+    const { api, triggerUpdates, opened, copied } = makeApi()
+    render(<HostApp api={api} />)
+    await screen.findByText('当前没有启动服务')
+
+    triggerUpdates({
+      app: {
+        name: 'dsh-desktop',
+        current: '0.1.0',
+        latest: '0.1.1',
+        updateAvailable: true,
+        downloadUrl: 'https://example.com/dsh-desktop-0.1.1-arm64.dmg',
+        releaseUrl: 'https://github.com/johnhom1024/dsh-desktop/releases/tag/v0.1.1',
+      },
+      dsh: { name: '@deepseek-ai/dsh', current: '0.1.0', latest: '0.1.0', updateAvailable: false },
+    })
+
+    expect(await screen.findByText('dsh-desktop 有新版本')).toBeInTheDocument()
+    expect(screen.getByText('v0.1.1 已发布。需要手动下载新安装包。')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '打开 Release 页面' }))
+    expect(opened).toEqual(['https://github.com/johnhom1024/dsh-desktop/releases/tag/v0.1.1'])
+    expect(screen.queryByText('dsh-desktop 有新版本')).not.toBeInTheDocument()
+  })
+
+  test('copy-download action writes the URL to the clipboard and shows a confirmation toast', async () => {
+    const user = userEvent.setup()
+    const { api, triggerUpdates, copied } = makeApi()
+    render(<HostApp api={api} />)
+    await screen.findByText('当前没有启动服务')
+
+    triggerUpdates({
+      app: {
+        name: 'dsh-desktop',
+        current: '0.1.0',
+        latest: '0.1.1',
+        updateAvailable: true,
+        downloadUrl: 'https://example.com/dsh-desktop-0.1.1-arm64.dmg',
+        releaseUrl: 'https://github.com/johnhom1024/dsh-desktop/releases/tag/v0.1.1',
+      },
+      dsh: { name: '@deepseek-ai/dsh', current: '0.1.0', latest: '0.1.0', updateAvailable: false },
+    })
+
+    await user.click(await screen.findByRole('button', { name: '复制下载链接' }))
+
+    expect(copied).toEqual(['https://example.com/dsh-desktop-0.1.1-arm64.dmg'])
+    expect(await screen.findByText('下载链接已复制到剪贴板。')).toBeInTheDocument()
+    expect(screen.queryByText('dsh-desktop 有新版本')).not.toBeInTheDocument()
+  })
+
+  test('does not re-announce the same app version within a session', async () => {
+    const { api, triggerUpdates } = makeApi()
+    render(<HostApp api={api} />)
+    await screen.findByText('当前没有启动服务')
+
+    const report: UpdateReport = {
+      app: {
+        name: 'dsh-desktop',
+        current: '0.1.0',
+        latest: '0.1.1',
+        updateAvailable: true,
+        downloadUrl: 'https://example.com/dsh-desktop-0.1.1-arm64.dmg',
+        releaseUrl: 'https://github.com/johnhom1024/dsh-desktop/releases/tag/v0.1.1',
+      },
+      dsh: { name: '@deepseek-ai/dsh', current: '0.1.0', latest: '0.1.0', updateAvailable: false },
+    }
+
+    triggerUpdates(report)
+    expect(await screen.findByText('dsh-desktop 有新版本')).toBeInTheDocument()
+
+    triggerUpdates(report)
+    expect(screen.getAllByText('dsh-desktop 有新版本')).toHaveLength(1)
+  })
+
+  test('settings page exposes an open-release button alongside the existing update button', async () => {
+    const user = userEvent.setup()
+    const { api, triggerUpdates, opened } = makeApi()
+    render(<HostApp api={api} />)
+
+    // Wait for the initial mount effect to register the onUpdatesResult
+    // listener, then push the update — otherwise the report arrives before
+    // the renderer subscribed and is dropped.
+    await screen.findByText('当前没有启动服务')
+    triggerUpdates({
+      app: {
+        name: 'dsh-desktop',
+        current: '0.1.0',
+        latest: '0.1.1',
+        updateAvailable: true,
+        downloadUrl: 'https://example.com/dsh-desktop-0.1.1-arm64.dmg',
+        releaseUrl: 'https://github.com/johnhom1024/dsh-desktop/releases/tag/v0.1.1',
+      },
+      dsh: { name: '@deepseek-ai/dsh', current: '0.1.0', latest: '0.1.0', updateAvailable: false },
+    })
+
+    await user.click(await screen.findByRole('button', { name: '前往设置' }))
+    // The toast also carries the same label — grab the settings row's button
+    // by its explicit id to avoid the accessibility-name collision.
+    const openButton = document.getElementById('openAppRelease') as HTMLButtonElement
+    expect(openButton).not.toBeNull()
+    await user.click(openButton)
+    expect(opened).toEqual(['https://github.com/johnhom1024/dsh-desktop/releases/tag/v0.1.1'])
   })
 })
