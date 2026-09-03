@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs'
 import { BrowserWindow, app, nativeImage, shell, type WebContents } from 'electron'
 import { clampWindowBounds, type WindowBounds } from './host-state.js'
-import { TAB_BAR_HEIGHT } from './instance-views.js'
+import { SIDEBAR_WIDTH, TAB_BAR_HEIGHT } from './instance-views.js'
 import { desktopIconFile, devIconFile, resolveDesktopIconFile } from './paths.js'
 
 // Standard macOS traffic-light button height, used to center the buttons in
-// the host tab bar when the native title bar is hidden. The glyphs sit slightly
-// low inside their box, so lift them a few px for optical centering.
+// the sidebar header when the native title bar is hidden. The glyphs sit
+// slightly low inside their box, so lift them a few px for optical centering.
 const TRAFFIC_LIGHT_HEIGHT = 12
 const TRAFFIC_LIGHT_OPTICAL_LIFT = 3
 
@@ -59,14 +59,17 @@ export function createMainWindow(opts: {
   return new BrowserWindow({
     width: bounds?.width ?? 1280,
     height: bounds?.height ?? 840,
+    minWidth: SIDEBAR_WIDTH + 420,
+    minHeight: 360,
     x: bounds?.x,
     y: bounds?.y,
     show: false,
     backgroundColor: '#eef1f4',
     title: app.isPackaged ? 'dsh-desktop' : 'dsh-desktop (Dev)',
     icon: loadDesktopIcon(),
-    // The 44px host tab bar is the window chrome. Hide the native title bar so
-    // no app title text is shown; traffic lights sit inside the tab bar.
+    // Arc-style vertical sidebar: the host owns the left rail (tabs, settings,
+    // theme). Hide the native title bar; traffic lights sit in the sidebar
+    // header, and the official page reaches the top-right of the window.
     ...(process.platform === 'darwin'
       ? {
           titleBarStyle: 'hiddenInset' as const,

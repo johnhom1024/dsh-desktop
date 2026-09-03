@@ -7,6 +7,7 @@ import {
   Tray,
   WebContentsView,
   app,
+  clipboard,
   ipcMain,
   nativeImage,
   nativeTheme,
@@ -20,7 +21,7 @@ import { startHarnessWeb, stopListeningOnPort } from './harness-process.js'
 import { appendHostLog, formatTrayStatus } from './host-state.js'
 import { instanceExternalUrl, instanceMenuItems, type InstanceMenuAction } from './instance-menu.js'
 import { removeInstance, renameInstance, selectInstance, setLocalPort, upsertInstance } from './instances.js'
-import { TAB_BAR_HEIGHT, layoutActiveView, shouldShowInstanceView } from './instance-views.js'
+import { layoutActiveView, shouldShowInstanceView } from './instance-views.js'
 import { launchSpecFor } from './launch.js'
 import {
   DSH_PACKAGE,
@@ -49,8 +50,10 @@ import { bindSingleInstance } from './single-instance.js'
 import { applyTrayMenu, createTray, hideInsteadOfClose, setTrayStatus } from './tray.js'
 import {
   checkUpdates,
+  fetchGithubLatestRelease,
   fetchGithubLatestTag,
   fetchNpmLatestVersion,
+  mergeAppRelease,
   type UpdateReport,
   type UpdateTarget,
 } from './updates.js'
@@ -419,7 +422,7 @@ function layoutViews(): void {
   const activeId = loadSettings(userData()).activeInstanceId
   const [width, height] = mainWindow.getContentSize()
   if (!officialViewBlocked()) {
-    layoutActiveView(instanceViews, currentUrl ? activeId : null, { width, height }, TAB_BAR_HEIGHT)
+    layoutActiveView(instanceViews, currentUrl ? activeId : null, { width, height })
   }
   for (const [id, view] of instanceViews) {
     const show = shouldShowInstanceView({
@@ -854,20 +857,25 @@ function ensureMainWindow(): BrowserWindow {
 }
 
 async function inspectUpdates(target: UpdateTarget = 'both'): Promise<UpdateReport> {
-  return checkUpdates({
-    appCurrent: app.getVersion(),
-    dshCurrent: await currentDshVersion(),
-    target,
-    fetchLatest: async (name) => {
-      if (name === '@deepseek-ai/dsh') {
-        return fetchNpmLatestVersion(name)
-      }
-      if ((name === 'dsh-desktop' || name === 'dsh-app') && GITHUB_REPO) {
-        return fetchGithubLatestTag(GITHUB_REPO)
-      }
-      return null
-    },
-  })
+  const wantsApp = target === 'app' || target === 'both'
+  const [report, release] = await Promise.all([
+    checkUpdates({
+      appCurrent: app.getVersion(),
+      dshCurrent: await currentDshVersion(),
+      target,
+      fetchLatest: async (name) => {
+        if (name === '@deepseek-ai/dsh') {
+          return fetchNpmLatestVersion(name)
+        }
+        if ((name === 'dsh-desktop' || name === 'dsh-app') && GITHUB_REPO) {
+          return fetchGithubLatestTag(GITHUB_REPO)
+        }
+        return null
+      },
+    }),
+    wantsApp && GITHUB_REPO ? fetchGithubLatestRelease(GITHUB_REPO) : Promise.resolve(null),
+  ])
+  return mergeAppRelease(report, release, process.arch)
 }
 
 async function quitApp(): Promise<void> {
@@ -1166,6 +1174,29 @@ function registerIpc(): void {
     if (mode === 'light' || mode === 'dark' || mode === 'system') {
       nativeTheme.themeSource = mode
     }
+  })
+
+  ipcMain.handle('shellOpenExternal', (_event, url: unknown) => {
+    if (typeof url !== 'string') {
+      return
+    }
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      return
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return
+    }
+    void shell.openExternal(parsed.toString())
+  })
+
+  ipcMain.handle('shellCopyToClipboard', (_event, text: unknown) => {
+    if (typeof text !== 'string') {
+      return
+    }
+    clipboard.writeText(text)
   })
 }
 

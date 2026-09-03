@@ -90,12 +90,16 @@
   }
 }
 
+/* Arc-style vertical sidebar: the whole rail is the window drag region —
+   including the macOS traffic-light header and the empty space below the
+   tabs. Only the interactive controls themselves opt back out. Wheel
+   scrolling inside the nav still works; the tabs are the only click
+   targets, and each is explicitly no-drag. */
 #chrome {
   -webkit-app-region: drag;
 }
 
-#chrome button,
-#chrome [role="tablist"] {
+#chrome button {
   -webkit-app-region: no-drag;
   pointer-events: auto;
 }
@@ -110,6 +114,10 @@
 #chrome [role="tab"]:focus-visible {
   outline: none;
   box-shadow: none;
+}
+
+#chrome #tabs {
+  scrollbar-width: thin;
 }
 
 

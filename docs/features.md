@@ -36,7 +36,7 @@
 
 ## 3. 首次使用与设置里的启动
 
-主窗口永远保留 44px 宿主顶栏。当前先做单实例：左边「设置」tab，右边本机实例 tab。官方 Web 用 `WebContentsView` 贴在顶栏下面。凡是会画出顶栏的宿主 UI（设置页、重命名弹窗、宿主 DevTools 检查）必须先摘掉官方视图；tab 三点菜单用系统原生 `Menu.popup`，不要用 HTML 下拉。菜单项左侧用系统图标：「重命名」、「刷新」和「浏览器打开」。详见 [host-overlays.md](host-overlays.md)。多实例（远程 tab / 加号）先关掉，以后再加。
+主窗口是 Arc 式垂直侧边栏布局：左侧 208px 宿主侧栏（顶部 44px 头部区内嵌 macOS 红绿灯，往下是实例 tab 垂直列表，底部是设置 tab 和主题切换），右侧整块是官方 Web 的 `WebContentsView`，从 y=0 顶到窗口右上角。凡是会画出侧栏的宿主 UI（设置页、重命名弹窗、宿主 DevTools 检查）必须先摘掉官方视图；tab 三点菜单用系统原生 `Menu.popup`，不要用 HTML 下拉。菜单项左侧用系统图标：「重命名」、「刷新」和「浏览器打开」。详见 [host-overlays.md](host-overlays.md)。多实例（远程 tab / 加号）先关掉，以后再加。侧栏整条都是窗口拖拽区（含 tab 下方空白），只有按钮本身不拖。
 
 没检测到官方 Web 时，本机 tab 显示空状态：「当前没有启动服务，首次使用请先去设置里设置」。不会在这个容器里列出安装命令，也不会自动执行。
 
@@ -70,7 +70,7 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 
 ## 4. 窗口、托盘、单实例
 
-- macOS 隐藏原生标题栏（`titleBarStyle: 'hiddenInset'`）：窗口左上角不显示应用名文本，红绿灯按钮嵌进 44px 宿主顶栏（`trafficLightPosition`，光学居中上提 3px），顶栏左侧为按钮留白 78px
+- macOS 隐藏原生标题栏（`titleBarStyle: 'hiddenInset'`）：红绿灯按钮嵌进侧栏顶部 44px 头部区（`trafficLightPosition`，光学居中上提 3px），tab 列表从 44px 以下开始，不再有挤压问题
 - 关主窗口：藏到菜单栏托盘，进程还在
 - `Cmd+Q`、应用菜单「退出」、托盘「退出」都会真正退出（停掉本应用拉起的子进程）
 - **单实例**：全机只跑一份。再点图标不会再开一个 Electron / 托盘 / `dsh web`，只把已有窗口拉到前台（最小化会先还原）
@@ -133,6 +133,8 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 | `dsh-desktop` 壳本身 | 仅当环境变量 `DSH_DESKTOP_GITHUB_REPO=owner/repo` 有值时，查该仓库 latest release tag |
 
 设置页每行左边是项目名，右边是当前版本。区块右下角一个「检查更新」会同时查两项。发现新版本时，对应行右侧再出现「更新」按钮。dsh 行的「更新」会：停掉当前本机服务 → 用上次选择的包管理器以 `@deepseek-ai/dsh@latest` 重新拉起（绕过 dlx/npx 的版本缓存）→ 起来后自动复查版本；期间按钮显示加载动画，启动日志实时显示在设置页下方。`dsh-desktop` 壳本身的「更新」仍只复查版本（壳更新需要重新下载安装包，不做 `electron-updater` 自动下载）。`dsh-desktop` 没发到 npm，未设置上述变量时只显示当前应用版本，不会误报有新包。拉不到 latest 时 `updateAvailable` 为 false。
+
+当 `DSH_DESKTOP_GITHUB_REPO` 已配置且能匹配当前架构的 DMG（`dsh-desktop-*-{arm64|x64}.dmg`）时，壳更新会同时携带 `downloadUrl`（直链）和 `releaseUrl`（HTML 页）。检测到新版本时顶栏弹一条 toast，标题「dsh-desktop 有新版本」，含「打开 Release 页面」和「复制下载链接」两个动作；点动作或复制后这条 toast 自动消失；同一个 tag 在一次会话内只提示一次。设置页 dsh-desktop 行也会多一个「打开 Release 页面」按钮。`shellOpenExternal` 只接受 `http:` / `https:` 协议，避免被注入 `file:` 等任意协议。
 
 ---
 

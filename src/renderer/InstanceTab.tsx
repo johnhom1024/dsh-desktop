@@ -35,7 +35,7 @@ export function InstanceTab({ instance, selected, href, onSelect, onMenu }: Inst
     <div
       title={urlLabel}
       className={cn(
-        'group inline-flex h-8 max-w-60 min-w-0 items-center rounded-lg border pl-2.5 pr-0.5 text-sm transition-colors',
+        'group flex h-9 w-full shrink-0 items-center rounded-lg border pl-2.5 pr-0.5 text-sm transition-colors',
         selected
           ? 'border-border bg-card text-foreground shadow-sm'
           : 'border-transparent text-muted-foreground hover:bg-foreground/10 hover:text-foreground',

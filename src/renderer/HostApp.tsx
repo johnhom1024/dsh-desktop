@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
-import { Toaster, type ToastItem } from '@/components/ui/toast'
+import { Toaster, type ToastAction, type ToastItem } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { InstanceTab } from './InstanceTab'
 import {
@@ -36,10 +36,10 @@ type HostAppProps = {
 
 const SETTINGS_TAB_ID = 'settings'
 
-// On macOS the native title bar is hidden (titleBarStyle: 'hiddenInset') and
-// the traffic-light buttons overlay the left side of the 44px host tab bar.
-// Leave room for them (buttons end at x≈69 in a 44px bar) plus breathing
-// room, so the first tab is not covered and does not crowd the buttons.
+// Arc-style vertical sidebar: the host owns the left rail; on macOS the native
+// title bar is hidden (titleBarStyle: 'hiddenInset') and the traffic-light
+// buttons sit in the 44px sidebar header at the same y as before. Instance tabs
+// start below it, so they never crowd the buttons.
 const IS_MAC =
   typeof navigator !== 'undefined' && /Macintosh|Mac OS X/i.test(navigator.userAgent)
 
@@ -179,6 +179,10 @@ function HostAppInner({ api }: HostAppProps) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const toastIdRef = useRef(0)
   const lastToastErrorRef = useRef<string | null>(null)
+  // Tags we have already announced in this session — re-running the same
+  // update check (or opening the menu's "Check for updates") must not spam
+  // a new toast for the same version.
+  const appUpdateToastTagRef = useRef<Set<string>>(new Set())
   const stateRef = useRef<ShellState | null>(null)
   const logRef = useRef<HTMLPreElement | null>(null)
   const stickLogToBottomRef = useRef(true)
@@ -191,6 +195,62 @@ function HostAppInner({ api }: HostAppProps) {
 
   function dismissToast(id: number) {
     setToasts((current) => current.filter((item) => item.id !== id))
+  }
+
+  function notifyAppUpdate(report: UpdateReport) {
+    const app = report.app
+    if (!app.updateAvailable) {
+      return
+    }
+    const tag = (app.latest ?? '').trim()
+    if (!tag || appUpdateToastTagRef.current.has(tag)) {
+      return
+    }
+    if (!app.downloadUrl && !app.releaseUrl) {
+      return
+    }
+    appUpdateToastTagRef.current.add(tag)
+    const actions: ToastAction[] = []
+    if (app.downloadUrl) {
+      actions.push({
+        id: 'copy-download',
+        label: t('updates.copyDownload'),
+        onClick: () => {
+          if (!app.downloadUrl) {
+            return
+          }
+          void api.copyToClipboard(app.downloadUrl)
+          toastIdRef.current += 1
+          const id = toastIdRef.current
+          setToasts((current) => [
+            ...current,
+            { id, description: t('updates.copied') },
+          ])
+        },
+      })
+    }
+    if (app.releaseUrl) {
+      actions.push({
+        id: 'open-release',
+        label: t('updates.openRelease'),
+        onClick: () => {
+          if (app.releaseUrl) {
+            void api.openExternal(app.releaseUrl)
+          }
+        },
+      })
+    }
+    toastIdRef.current += 1
+    const id = toastIdRef.current
+    setToasts((current) => [
+      ...current,
+      {
+        id,
+        title: t('updates.appToastTitle'),
+        description: t('updates.appToastDescription', { latest: tag }),
+        actions,
+      },
+    ])
   }
 
   function openSettingsPage() {
@@ -375,6 +435,7 @@ function HostAppInner({ api }: HostAppProps) {
     })
     const stopUpdates = api.onUpdatesResult((report) => {
       setUpdateReport(report)
+      notifyAppUpdate(report)
     })
     // Replay startup output that was emitted before this renderer mounted.
     if (api.getInstallLog) {
@@ -482,15 +543,20 @@ function HostAppInner({ api }: HostAppProps) {
   }
 
   return (
-    <div className="flex h-full flex-col bg-background text-foreground">
-      <div
+    <div className="flex h-full bg-background text-foreground">
+      <aside
         id="chrome"
         className={cn(
-          'flex h-11 shrink-0 items-center gap-2 border-b bg-muted/60 px-2',
-          IS_MAC && 'pl-[88px]',
+          'relative flex h-full w-52 shrink-0 flex-col border-r bg-muted/60',
+          IS_MAC && 'pt-[44px]',
         )}
       >
-        <div id="tabs" role="tablist" className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+        <nav
+          id="tabs"
+          role="tablist"
+          aria-orientation="vertical"
+          className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 py-2"
+        >
           <button
             id="settings"
             type="button"
@@ -499,15 +565,15 @@ function HostAppInner({ api }: HostAppProps) {
             aria-label={t('chrome.settingsAria')}
             aria-selected={settingsOpen}
             className={cn(
-              'inline-flex h-8 items-center gap-2 rounded-lg border px-2.5 text-sm transition-colors',
+              'inline-flex h-9 w-full shrink-0 items-center gap-2 rounded-lg border px-2.5 text-sm transition-colors',
               settingsOpen
                 ? 'border-border bg-card text-foreground shadow-sm'
                 : 'border-transparent text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
             )}
             onClick={openSettingsPage}
           >
-            <Settings className="size-3.5" aria-hidden="true" />
-            <span>{t('common.settings')}</span>
+            <Settings className="size-3.5 shrink-0" aria-hidden="true" />
+            <span className="truncate">{t('common.settings')}</span>
           </button>
           {instances.map((item) => (
             <InstanceTab
@@ -526,26 +592,30 @@ function HostAppInner({ api }: HostAppProps) {
               }}
             />
           ))}
+        </nav>
+        <div className="flex shrink-0 flex-col border-t px-2 py-2">
+          <Button
+            id="theme-toggle"
+            type="button"
+            variant="ghost"
+            className="h-9 w-full justify-start gap-2 px-2.5 text-sm text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+            aria-label={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
+            title={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
+            onClick={() => {
+              setTheme((current) => nextTheme(current))
+            }}
+          >
+            {theme === 'light' ? <Sun aria-hidden="true" /> : null}
+            {theme === 'dark' ? <Moon aria-hidden="true" /> : null}
+            {theme === 'system' ? <Monitor aria-hidden="true" /> : null}
+            <span className="truncate">{t(themeLabelKey(theme))}</span>
+          </Button>
         </div>
-        <Button
-          id="theme-toggle"
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="relative z-10 shrink-0 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
-          aria-label={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
-          title={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
-          onClick={() => {
-            setTheme((current) => nextTheme(current))
-          }}
-        >
-          {theme === 'light' ? <Sun aria-hidden="true" /> : null}
-          {theme === 'dark' ? <Moon aria-hidden="true" /> : null}
-          {theme === 'system' ? <Monitor aria-hidden="true" /> : null}
-        </Button>
-      </div>
+        <Toaster toasts={toasts} onDismiss={dismissToast} />
+      </aside>
 
-      <Dialog
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Dialog
         open={Boolean(renaming)}
         onOpenChange={(open) => {
           if (!open) {
@@ -994,16 +1064,33 @@ function HostAppInner({ api }: HostAppProps) {
                       ) : null}
                     </p>
                     {updateReport?.app?.updateAvailable ? (
-                      <Button
-                        id="updateApp"
-                        type="button"
-                        size="sm"
-                        onClick={() => {
-                          void refreshUpdates('app')
-                        }}
-                      >
-                        {t('common.update')}
-                      </Button>
+                      <>
+                        {updateReport.app.releaseUrl ? (
+                          <Button
+                            id="openAppRelease"
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              if (updateReport.app?.releaseUrl) {
+                                void api.openExternal(updateReport.app.releaseUrl)
+                              }
+                            }}
+                          >
+                            {t('updates.openRelease')}
+                          </Button>
+                        ) : null}
+                        <Button
+                          id="updateApp"
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            void refreshUpdates('app')
+                          }}
+                        >
+                          {t('common.update')}
+                        </Button>
+                      </>
                     ) : null}
                   </div>
                 </div>
@@ -1137,8 +1224,7 @@ function HostAppInner({ api }: HostAppProps) {
           </Card>
         </main>
       ) : null}
-
-      <Toaster toasts={toasts} onDismiss={dismissToast} />
+      </div>
     </div>
   )
 }

@@ -1,22 +1,27 @@
 import { deepEqual, equal } from 'node:assert/strict'
 import { test } from 'node:test'
-import { TAB_BAR_HEIGHT, chromeContentBounds, layoutActiveView, shouldShowInstanceView } from './instance-views.js'
+import {
+  SIDEBAR_WIDTH,
+  chromeContentBounds,
+  layoutActiveView,
+  shouldShowInstanceView,
+} from './instance-views.js'
 
-test('chromeContentBounds places the view below the tab bar', () => {
-  deepEqual(chromeContentBounds({ width: 1280, height: 840 }, TAB_BAR_HEIGHT), {
-    x: 0,
-    y: TAB_BAR_HEIGHT,
-    width: 1280,
-    height: 840 - TAB_BAR_HEIGHT,
+test('chromeContentBounds places the view right of the sidebar, top to bottom', () => {
+  deepEqual(chromeContentBounds({ width: 1280, height: 840 }), {
+    x: SIDEBAR_WIDTH,
+    y: 0,
+    width: 1280 - SIDEBAR_WIDTH,
+    height: 840,
   })
 })
 
-test('chromeContentBounds never returns a negative height', () => {
-  deepEqual(chromeContentBounds({ width: 800, height: 20 }, 40), {
-    x: 0,
-    y: 40,
-    width: 800,
-    height: 0,
+test('chromeContentBounds keeps a zero-width view when the window is narrower than the sidebar', () => {
+  deepEqual(chromeContentBounds({ width: 180, height: 400 }), {
+    x: 180,
+    y: 0,
+    width: 0,
+    height: 400,
   })
 })
 
@@ -41,14 +46,14 @@ test('layoutActiveView only sizes the active view', () => {
     ],
   ])
 
-  layoutActiveView(views, 'remote-1', { width: 1280, height: 840 }, TAB_BAR_HEIGHT)
+  layoutActiveView(views, 'remote-1', { width: 1280, height: 840 })
 
   equal(calls['local-3080'], undefined)
   deepEqual(calls['remote-1'], {
-    x: 0,
-    y: TAB_BAR_HEIGHT,
-    width: 1280,
-    height: 840 - TAB_BAR_HEIGHT,
+    x: SIDEBAR_WIDTH,
+    y: 0,
+    width: 1280 - SIDEBAR_WIDTH,
+    height: 840,
   })
 })
 
@@ -57,7 +62,7 @@ test('layoutActiveView no-ops when the active id is missing', () => {
   const views = new Map([
     ['local-3080', { setBounds: () => { called += 1 } }],
   ])
-  layoutActiveView(views, null, { width: 1280, height: 840 }, TAB_BAR_HEIGHT)
+  layoutActiveView(views, null, { width: 1280, height: 840 })
   equal(called, 0)
 })
 
