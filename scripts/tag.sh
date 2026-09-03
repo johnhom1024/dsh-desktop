@@ -83,7 +83,7 @@ confirm_tag() {
     echo "GitHub Release（DMG），并回写 main 的 package.json 为 ${tag#v}"
   fi
   echo "本脚本不 push。确认后再："
-  echo "  git push gh ${tag} && git push origin ${tag}"
+  echo "  git push origin ${tag}"
   echo
   read -r -p "打这个 tag？[y/N] " ans
   case "$ans" in
@@ -93,7 +93,7 @@ confirm_tag() {
 
   git tag "$tag"
   echo "已打 ${tag} @ ${head}"
-  echo "推远程：git push gh ${tag} && git push origin ${tag}"
+  echo "推远程：git push origin ${tag}"
 }
 
 cmd_list() {

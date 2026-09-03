@@ -198,7 +198,7 @@ GitHub 上推 `v*` tag 会跑 `.github/workflows/release.yml` 的两个 job：�
 beta 预发布走手动 tag（owiki 同款模式，不再用 `beta/*` 分支推送触发）：
 
 - `./scripts/tag.sh` 查看现有 tag 和下一步建议；`./scripts/tag.sh beta` 在 HEAD 打 `vX.Y.Z-beta.N`（已有 beta.10 则提议 beta.11），`./scripts/tag.sh release` 打正式版 tag
-- 脚本只本地打 tag，不 push；确认后手动 `git push gh <tag> && git push origin <tag>`
+- 脚本只本地打 tag，不 push；确认后手动 `git push origin <tag>`
 - tag 含 `-` 即 pre-release：GitHub 标 pre-release，且 `bump-main` job 跳过（不回写 main 的 `package.json`）；正式版 tag 才回写
 
 产物：
