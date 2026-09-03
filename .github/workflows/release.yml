@@ -1,5 +1,11 @@
 name: Release
 
+# Push a v* tag to publish (scripts/tag.sh creates tags locally — pushing one
+# is always an explicit human action):
+#   stable    v0.1.2          → DMG release + version bump committed to main
+#   prerelease v0.1.2-beta.1  → DMG pre-release, no bump on main
+# A tag containing '-' is treated as a prerelease (owiki-style manual pinned
+# tags; no beta/* branch pushes anymore).
 on:
   push:
     tags:
@@ -171,12 +177,13 @@ jobs:
 
   # Runs once after both builds succeed. Records the released version as a
   # regular commit on main so package.json tracks reality without manual
-  # bumps. Safe from loops: pushes made with GITHUB_TOKEN never trigger
-  # workflows, and beta/* builds never land here (they are tag-less pushes
-  # handled by beta-release.yml, whose tags are created by GITHUB_TOKEN).
+  # bumps. Stable tags only — prerelease tags (anything with '-') skip the
+  # bump so main's package.json only tracks shipped stable versions.
+  # Safe from loops: pushes made with GITHUB_TOKEN never trigger workflows.
   bump-main:
     name: Record released version on main
     needs: [mac-arm64, mac-x64]
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
