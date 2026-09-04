@@ -112,12 +112,20 @@ Remote tabs only probe their saved `http(s)` URL. A down remote never falls back
 
 | Detected | Start command |
 | --- | --- |
-| pnpm | `pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --port 3080` |
-| npx | `npx -y @deepseek-ai/dsh web --port 3080` |
-| yarn | `yarn dlx @deepseek-ai/dsh web --port 3080` |
-| bunx | `bunx @deepseek-ai/dsh web --port 3080` |
+| pnpm | `pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh@latest web --port 3080` |
+| npx | `npx -y @deepseek-ai/dsh@latest web --port 3080` |
+| yarn | `yarn dlx @deepseek-ai/dsh@latest web --port 3080` |
+| bunx | `bunx @deepseek-ai/dsh@latest web --port 3080` |
 
 Packaged launches from Finder often miss Homebrew / pnpm. The host prepends `/opt/homebrew/bin`, `/usr/local/bin`, and the user's pnpm homes, and also reads `export PATH=` lines from shell profiles without executing those files.
+
+While the app is running, a loopback-only control server listens on `http://127.0.0.1:8999`. Local agents should POST there instead of killing port 3080:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8999/dsh/restart
+curl -sS -X POST http://127.0.0.1:8999/dsh/upgrade
+curl -sS http://127.0.0.1:8999/dsh/status
+```
 
 ## Develop
 

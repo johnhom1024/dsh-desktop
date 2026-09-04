@@ -110,12 +110,20 @@ sudo xattr -r -d com.apple.quarantine /Applications/dsh-desktop.app
 
 | 检测到 | 启动命令 |
 | --- | --- |
-| pnpm | `pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --port 3080` |
-| npx | `npx -y @deepseek-ai/dsh web --port 3080` |
-| yarn | `yarn dlx @deepseek-ai/dsh web --port 3080` |
-| bunx | `bunx @deepseek-ai/dsh web --port 3080` |
+| pnpm | `pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh@latest web --port 3080` |
+| npx | `npx -y @deepseek-ai/dsh@latest web --port 3080` |
+| yarn | `yarn dlx @deepseek-ai/dsh@latest web --port 3080` |
+| bunx | `bunx @deepseek-ai/dsh@latest web --port 3080` |
 
 从访达打开打包后的 `.app` 时，经常看不到 Homebrew / pnpm。宿主会前置 `/opt/homebrew/bin`、`/usr/local/bin` 和用户的 pnpm 目录，并只读解析 shell 配置里的 `export PATH=`，**不会执行**这些文件。
+
+应用运行时会在 `http://127.0.0.1:8999` 开一个只绑回环的控制面。本机 agent 不要 `kill` 3080，改打这个口：
+
+```bash
+curl -sS -X POST http://127.0.0.1:8999/dsh/restart
+curl -sS -X POST http://127.0.0.1:8999/dsh/upgrade
+curl -sS http://127.0.0.1:8999/dsh/status
+```
 
 ## 开发
 

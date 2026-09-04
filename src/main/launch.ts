@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import { DSH_PACKAGE, PNPM_DLX_PREFIX, harnessWebArgs } from './package-managers.js'
+import { DSH_PACKAGE_LATEST, PNPM_DLX_PREFIX, harnessWebArgs } from './package-managers.js'
 import { DEFAULT_LOCAL_PORT, type RuntimeSource } from './runtime.js'
 
 export type LaunchSpec =
@@ -72,7 +72,7 @@ export function launchSpecFor(
     if (!npx) {
       return { kind: 'none' }
     }
-    return { kind: 'spawn', command: npx, args: harnessWebArgs(['-y', DSH_PACKAGE], port) }
+    return { kind: 'spawn', command: npx, args: harnessWebArgs(['-y', DSH_PACKAGE_LATEST], port) }
   }
 
   if (source.kind === 'bundled') {

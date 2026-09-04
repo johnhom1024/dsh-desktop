@@ -10,7 +10,7 @@
 
 | 宿主负责 | 官方 Harness 负责 |
 | --- | --- |
-| 进程、端口、托盘、设置、首次空状态、loopback 导航 | Agent / 官方 Web UI |
+| 进程、端口、托盘、设置、首次空状态、loopback 导航、本机控制面 | Agent / 官方 Web UI |
 
 - 独立仓库，不 fork 官方仓
 - 渲染进程：`nodeIntegration: false`、`contextIsolation: true`、`sandbox: true`
@@ -57,10 +57,10 @@
 
 | 检测到 | 命令 |
 | --- | --- |
-| pnpm | `pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --port 3080` |
-| npx | `npx -y @deepseek-ai/dsh web --port 3080` |
-| yarn | `yarn dlx @deepseek-ai/dsh web --port 3080` |
-| bunx | `bunx @deepseek-ai/dsh web --port 3080` |
+| pnpm | `pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh@latest web --port 3080` |
+| npx | `npx -y @deepseek-ai/dsh@latest web --port 3080` |
+| yarn | `yarn dlx @deepseek-ai/dsh@latest web --port 3080` |
+| bunx | `bunx @deepseek-ai/dsh@latest web --port 3080` |
 
 新拉起和复用 / 探测都用设置里保存的 `localPort`，默认 3080。
 
@@ -132,13 +132,42 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 | `@deepseek-ai/dsh` | npm `latest`，与 PATH / pnpm dlx 缓存 / npx 缓存 / 已连接页面里读到的当前版本比（含 rc） |
 | `dsh-desktop` 壳本身 | 仅当环境变量 `DSH_DESKTOP_GITHUB_REPO=owner/repo` 有值时，查该仓库 latest release tag |
 
-设置页每行左边是项目名，右边是当前版本。区块右下角一个「检查更新」会同时查两项。发现新版本时，对应行右侧再出现「更新」按钮。dsh 行的「更新」会：停掉当前本机服务 → 用上次选择的包管理器以 `@deepseek-ai/dsh@latest` 重新拉起（绕过 dlx/npx 的版本缓存）→ 起来后自动复查版本；期间按钮显示加载动画，启动日志实时显示在设置页下方。`dsh-desktop` 壳本身的「更新」仍只复查版本（壳更新需要重新下载安装包，不做 `electron-updater` 自动下载）。`dsh-desktop` 没发到 npm，未设置上述变量时只显示当前应用版本，不会误报有新包。拉不到 latest 时 `updateAvailable` 为 false。
+日常启动、重启、更新都用 `@deepseek-ai/dsh@latest`，避免 dlx/npx 吃到过期的解析缓存。设置页每行左边是项目名，右边是当前版本。区块右下角一个「检查更新」会同时查两项。发现新版本时，对应行右侧再出现「更新」按钮。dsh 行的「更新」会：停掉当前本机服务 → 用上次选择的包管理器重新拉起 → 起来后自动复查版本；期间按钮显示加载动画，启动日志实时显示在设置页下方。`dsh-desktop` 壳本身的「更新」仍只复查版本（壳更新需要重新下载安装包，不做 `electron-updater` 自动下载）。`dsh-desktop` 没发到 npm，未设置上述变量时只显示当前应用版本，不会误报有新包。拉不到 latest 时 `updateAvailable` 为 false。
 
 当 `DSH_DESKTOP_GITHUB_REPO` 已配置且能匹配当前架构的 DMG（`dsh-desktop-*-{arm64|x64}.dmg`）时，壳更新会同时携带 `downloadUrl`（直链）和 `releaseUrl`（HTML 页）。检测到新版本时顶栏弹一条 toast，标题「dsh-desktop 有新版本」，含「打开 Release 页面」和「复制下载链接」两个动作；点动作或复制后这条 toast 自动消失；同一个 tag 在一次会话内只提示一次。设置页 dsh-desktop 行也会多一个「打开 Release 页面」按钮。`shellOpenExternal` 只接受 `http:` / `https:` 协议，避免被注入 `file:` 等任意协议。
 
 ---
 
-## 8. 打包后补 PATH
+## 8. 本机控制面（127.0.0.1:8999）
+
+宿主进程启动后在 **只绑 `127.0.0.1:8999`** 的 HTTP 服务上暴露三条路由，给本机 agent / 脚本调用。不设 token：信任面就是 loopback。LAN / 公网打不到这个口。
+
+| 方法 | 路径 | 行为 |
+| --- | --- | --- |
+| `GET` | `/dsh/status` | 当前是否本机 tab、是否 busy、dsh 版本、启动端口 |
+| `POST` | `/dsh/restart` | 等同设置页「重启服务」：停掉本机 dsh web，再用已保存命令拉起 |
+| `POST` | `/dsh/upgrade` | 等同设置页「更新 DSH」：停掉再拉起。命令本身已是 `@latest` |
+
+约束：
+
+- 必须 `POST`。`GET /dsh/upgrade` 返回 405，避免网页 `<img>` 误触发
+- 当前是远程实例 → 403 `remote-instance`，不会去动 NAS
+- 已经在启动 / 重启 / 更新 → 409 `busy`
+- 接受后立刻 202，真正干活在后台。当前 DSH 会话会被掐断，这是预期
+- 带非 loopback `Origin` 的浏览器请求 → 403
+- 8999 被占用时控制面起不来，写一条 `shell.log`，宿主其余功能照常
+
+本机 agent 不要 `kill` 3080，改打这个口。示例：
+
+```bash
+curl -sS -X POST http://127.0.0.1:8999/dsh/restart
+curl -sS -X POST http://127.0.0.1:8999/dsh/upgrade
+curl -sS http://127.0.0.1:8999/dsh/status
+```
+
+---
+
+## 9. 打包后补 PATH
 
 从 Finder 打开 `.app` 时，GUI 进程通常看不到 Homebrew / pnpm。启动最早会调用 `repairProcessPath()`（在单实例锁之前），写入 `process.env.PATH`。
 
@@ -155,7 +184,7 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 
 ---
 
-## 9. 安装过程日志
+## 10. 安装过程日志
 
 - 设置页在手动启动时实时显示 `pnpm dlx` 等命令的 stdout / stderr，完成前不跳走
 - 同一份输出追加到 `userData/web.log`
@@ -168,14 +197,14 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 
 ---
 
-## 10. 远程失败与掉线回退
+## 11. 远程失败与掉线回退
 
 - 远程模式 URL 不通：提示 **远程实例不可达**，来源保持 `remote`，**不**去 spawn 本机 `dsh`
 - 已连上官方页后，每 **8 秒**再探测一次；不通则回到本机空状态，文案为「DeepSeek Harness 已停止响应。」，避免白屏
 
 ---
 
-## 11. 窗口记忆与上次包管理器
+## 12. 窗口记忆与上次包管理器
 
 - 拖动 / 缩放主窗口后 300ms 写入 `windowBounds`（节流，避免狂写磁盘）
 - 下次启动按上次位置打开；宽高最小 800×600
@@ -184,7 +213,7 @@ pnpm 10+ 可能弹出「选择需要 build 的包」。桌面进程没有 TTY，
 
 ---
 
-## 12. 打包（macOS DMG）
+## 13. 打包（macOS DMG）
 
 ```bash
 pnpm dist:mac        # Apple Silicon arm64
@@ -216,7 +245,7 @@ beta 预发布走手动 tag（owiki 同款模式，不再用 `beta/*` 分支推�
 
 ---
 
-## 13. 开发命令
+## 14. 开发命令
 
 需要 Node 22.15+ 和 pnpm 8.11。
 
@@ -233,7 +262,7 @@ Electron 二进制不走 npm registry，项目 `.npmrc` 已设 `electron_mirror=
 
 ---
 
-## 14. 明确没做
+## 15. 明确没做
 
 这些不是漏实现，是刻意不做或缺前置条件：
 
@@ -246,11 +275,12 @@ Electron 二进制不走 npm registry，项目 `.npmrc` 已设 `electron_mirror=
 
 ---
 
-## 15. 关键源码
+## 16. 关键源码
 
 | 模块 | 文件 |
 | --- | --- |
 | 启动编排 / IPC / 看门狗 | `src/main/index.ts` |
+| 本机控制面 | `src/main/control-server.ts` |
 | 运行时解析 | `src/main/runtime.ts` |
 | 设置读写 | `src/main/settings.ts` |
 | 探测官方页 | `src/main/probe.ts` |

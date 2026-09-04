@@ -23,8 +23,8 @@ import { instanceExternalUrl, instanceMenuItems, type InstanceMenuAction } from 
 import { removeInstance, renameInstance, selectInstance, setLocalPort, upsertInstance } from './instances.js'
 import { layoutActiveView, shouldShowInstanceView, sidebarWidthFor } from './instance-views.js'
 import { launchSpecFor } from './launch.js'
+import { startControlServer, type ControlAction } from './control-server.js'
 import {
-  DSH_PACKAGE,
   detectPackageManagers,
   lookupOnPath,
   previewFor,
@@ -85,6 +85,7 @@ let boundsTimer: ReturnType<typeof setTimeout> | null = null
 const instanceViews = new Map<string, WebContentsView>()
 let overlayCount = 0
 let hostDevToolsOpen = false
+let stopControlServer: (() => Promise<void>) | null = null
 
 function userData(): string {
   return app.getPath('userData')
@@ -538,9 +539,7 @@ async function stopLocalService(): Promise<void> {
   await pushState()
 }
 
-// Stop the running local dsh web, then start it again with the saved launch
-// command. Mirrors the update flow (never reuses the running service).
-async function restartLocalService(): Promise<ShellState> {
+async function relaunchLocalService(opts: { latest?: boolean; restart?: boolean }): Promise<ShellState> {
   const settings = loadSettings(userData())
   const active = activeInstance(settings)
   if (active?.kind === 'remote') {
@@ -558,7 +557,17 @@ async function restartLocalService(): Promise<ShellState> {
     await pushState()
     return shellState()
   }
-  return installWithManager(id, { restart: true })
+  return installWithManager(id, opts)
+}
+
+// Stop the running local dsh web, then start it again with the saved launch
+// command. Mirrors the update flow (never reuses the running service).
+async function restartLocalService(): Promise<ShellState> {
+  return relaunchLocalService({ restart: true })
+}
+
+async function updateLocalService(): Promise<ShellState> {
+  return relaunchLocalService({ latest: true })
 }
 
 async function applySource(source: RuntimeSource): Promise<string | null> {
@@ -789,7 +798,7 @@ async function installWithManager(
     }
   }
 
-  const args = opts?.latest ? harnessWebArgsWithLatest(chosen.args) : chosen.args
+  const args = chosen.args
   const preview = previewFor(chosen.commandPath, args)
 
   await stopOwnedHarness()
@@ -803,7 +812,7 @@ async function installWithManager(
       command: chosen.commandPath,
       args,
       probe: probeHarnessWeb,
-      timeoutMs: opts?.latest ? 300_000 : 120_000,
+      timeoutMs: 300_000,
       onOutput: emitInstallLog,
     })
     stopHarness = started.stop
@@ -823,12 +832,6 @@ async function installWithManager(
 
   await pushState()
   return shellState()
-}
-
-// dlx/npx cache the resolved version. Re-target @deepseek-ai/dsh to
-// @deepseek-ai/dsh@latest so the next launch pulls the new release.
-function harnessWebArgsWithLatest(args: string[]): string[] {
-  return args.map((item) => (item === DSH_PACKAGE ? `${DSH_PACKAGE}@latest` : item))
 }
 
 function ensureMainWindow(): BrowserWindow {
@@ -897,9 +900,21 @@ async function quitApp(): Promise<void> {
   quitting = true
   stopWatch()
   persistWindowBounds()
+  if (stopControlServer) {
+    await stopControlServer()
+    stopControlServer = null
+  }
   await stopOwnedHarness()
   destroyInstanceViews()
   app.quit()
+}
+
+async function handleControlAction(action: ControlAction): Promise<void> {
+  if (action === 'restart') {
+    await restartLocalService()
+    return
+  }
+  await updateLocalService()
 }
 
 function registerMenu(): void {
@@ -1020,18 +1035,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('shellUpdateDsh', async () => {
-    const settings = loadSettings(userData())
-    const managers = await detectPackageManagers(lookupOnPath, localPortFromSettings(settings))
-    const id =
-      settings.lastPackageManager && managers.some((item) => item.id === settings.lastPackageManager)
-        ? settings.lastPackageManager
-        : managers[0]?.id
-    if (!id) {
-      lastError = { code: 'error.managerMissing' }
-      await pushState()
-      return shellState()
-    }
-    return installWithManager(id, { latest: true })
+    return updateLocalService()
   })
 
   ipcMain.handle('shellStop', async () => {
@@ -1260,6 +1264,26 @@ void app.whenReady().then(async () => {
   applyOpenAtLogin(loadSettings(userData()).openAtLogin)
   tray = createTray(trayActions())
   ensureMainWindow()
+  try {
+    const control = await startControlServer({
+      isBusy: () => starting,
+      status: async () => {
+        const settings = loadSettings(userData())
+        const active = activeInstance(settings)
+        return {
+          local: active?.kind !== 'remote',
+          busy: starting,
+          dshVersion: await currentDshVersion(),
+          localPort: localPortFromSettings(settings),
+        }
+      },
+      run: handleControlAction,
+    })
+    stopControlServer = control.stop
+    logShell(`control server listening on ${control.url}`)
+  } catch (error) {
+    logShell(`control server failed to start: ${error instanceof Error ? error.message : String(error)}`)
+  }
   await connectActive()
 })
 

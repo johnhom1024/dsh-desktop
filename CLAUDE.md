@@ -30,3 +30,5 @@ pnpm dev
 ```
 
 改 `src/main` 或加依赖后重启 `pnpm dev`。渲染层 CSS/React 走 Vite HMR。
+
+本机控制面：`http://127.0.0.1:8999`（只绑回环）。`POST /dsh/restart`、`POST /dsh/upgrade`、`GET /dsh/status`。Agent 不要 `kill` 3080。

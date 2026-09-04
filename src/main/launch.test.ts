@@ -49,7 +49,7 @@ test('pnpm-dlx launches via pnpm dlx instead of Electron execPath', () => {
   deepEqual(spec, {
     kind: 'spawn',
     command: '/opt/homebrew/bin/pnpm',
-    args: ['--config.dangerouslyAllowAllBuilds=true', 'dlx', '@deepseek-ai/dsh', 'web', '--no-open', '--port', '3080'],
+    args: ['--config.dangerouslyAllowAllBuilds=true', 'dlx', '@deepseek-ai/dsh@latest', 'web', '--no-open', '--port', '3080'],
   })
 })
 
@@ -66,7 +66,7 @@ test('npx-cache launches via npx instead of Electron execPath', () => {
   deepEqual(spec, {
     kind: 'spawn',
     command: '/usr/local/bin/npx',
-    args: ['-y', '@deepseek-ai/dsh', 'web', '--no-open', '--port', '3080'],
+    args: ['-y', '@deepseek-ai/dsh@latest', 'web', '--no-open', '--port', '3080'],
   })
 })
 

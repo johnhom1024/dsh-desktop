@@ -10,15 +10,15 @@ const managers = [
     id: 'pnpm' as const,
     label: 'pnpm',
     commandPath: '/opt/homebrew/bin/pnpm',
-    args: ['dlx', '@deepseek-ai/dsh', 'web', '--no-open', '--port', '3080'],
-    preview: 'pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --no-open --port 3080',
+    args: ['dlx', '@deepseek-ai/dsh@latest', 'web', '--no-open', '--port', '3080'],
+    preview: 'pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh@latest web --no-open --port 3080',
   },
   {
     id: 'npm' as const,
     label: 'npm / npx',
     commandPath: '/usr/local/bin/npx',
-    args: ['-y', '@deepseek-ai/dsh', 'web', '--no-open', '--port', '3080'],
-    preview: 'npx -y @deepseek-ai/dsh web --no-open --port 3080',
+    args: ['-y', '@deepseek-ai/dsh@latest', 'web', '--no-open', '--port', '3080'],
+    preview: 'npx -y @deepseek-ai/dsh@latest web --no-open --port 3080',
   },
 ]
 
@@ -172,13 +172,13 @@ describe('HostApp', () => {
     expect(screen.queryByRole('button', { name: '重新连接' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('启动端口')).toHaveValue('18080')
     expect(
-      screen.getByText('pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --no-open --port 18080'),
+      screen.getByText('pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh@latest web --no-open --port 18080'),
     ).toBeInTheDocument()
     const startPort = document.getElementById('startPort') as HTMLInputElement
     await user.clear(startPort)
     await user.type(startPort, '18081')
     expect(
-      screen.getByText('pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh web --no-open --port 18081'),
+      screen.getByText('pnpm --config.dangerouslyAllowAllBuilds=true dlx @deepseek-ai/dsh@latest web --no-open --port 18081'),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '启动' })).toBeEnabled()
     expect(screen.getByRole('button', { name: '保存' })).toBeEnabled()
@@ -242,7 +242,7 @@ describe('HostApp', () => {
     await user.click(await screen.findByRole('button', { name: '前往设置' }))
     await user.click(await screen.findByRole('button', { name: '启动' }))
     sendState?.(shellState({ starting: true, lastPackageManager: 'pnpm' }))
-    sendLog?.('$ pnpm dlx @deepseek-ai/dsh web --no-open --port 3080\nDownloading…\n')
+    sendLog?.('$ pnpm dlx @deepseek-ai/dsh@latest web --no-open --port 3080\nDownloading…\n')
 
     expect(await screen.findByText('正在启动 DeepSeek Harness，日志会实时显示在下方。')).toBeInTheDocument()
     expect(screen.getByText(/Downloading…/)).toBeInTheDocument()

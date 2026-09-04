@@ -12,13 +12,15 @@ export type PackageManagerOption = {
 }
 
 export const DSH_PACKAGE = '@deepseek-ai/dsh'
+// Always pin @latest so dlx/npx do not reuse a stale resolved version.
+export const DSH_PACKAGE_LATEST = `${DSH_PACKAGE}@latest`
 
 // pnpm 10+ may ask which install scripts to approve. Desktop spawn has no TTY,
 // so skip that prompt and allow builds for this already-confirmed launch.
 export const PNPM_DLX_PREFIX = [
   '--config.dangerouslyAllowAllBuilds=true',
   'dlx',
-  DSH_PACKAGE,
+  DSH_PACKAGE_LATEST,
 ] as const
 
 const CANDIDATES: Array<{
@@ -28,9 +30,9 @@ const CANDIDATES: Array<{
   prefix: string[]
 }> = [
   { id: 'pnpm', label: 'pnpm', bin: 'pnpm', prefix: [...PNPM_DLX_PREFIX] },
-  { id: 'npm', label: 'npm / npx', bin: 'npx', prefix: ['-y', DSH_PACKAGE] },
-  { id: 'yarn', label: 'yarn', bin: 'yarn', prefix: ['dlx', DSH_PACKAGE] },
-  { id: 'bun', label: 'bun', bin: 'bunx', prefix: [DSH_PACKAGE] },
+  { id: 'npm', label: 'npm / npx', bin: 'npx', prefix: ['-y', DSH_PACKAGE_LATEST] },
+  { id: 'yarn', label: 'yarn', bin: 'yarn', prefix: ['dlx', DSH_PACKAGE_LATEST] },
+  { id: 'bun', label: 'bun', bin: 'bunx', prefix: [DSH_PACKAGE_LATEST] },
 ]
 
 export function harnessWebArgs(prefix: string[] = [], port: number = DEFAULT_LOCAL_PORT): string[] {
