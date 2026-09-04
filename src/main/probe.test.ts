@@ -43,6 +43,30 @@ test('probeHarnessWeb returns true for official DeepSeek Harness html', async ()
   equal(found, true)
 })
 
+test('probeHarnessWeb accepts the dsh 0.1.2 auth 401 as ready', async () => {
+  const server = createServer((req, res) => {
+    res.writeHead(401, { 'content-type': 'text/plain' })
+    res.end('dsh web authentication required')
+  })
+  servers.push(server)
+  const port = await listen(server)
+
+  equal(await probeHarnessWeb(`http://127.0.0.1:${port}/?token=abc`), true)
+  // Without a token the same 401 page is not a reusable official page.
+  equal(await probeHarnessWeb(`http://127.0.0.1:${port}/`), false)
+})
+
+test('probeHarnessWeb accepts the dsh 0.1.2 token 303 as ready', async () => {
+  const server = createServer((_req, res) => {
+    res.writeHead(303, { location: '/' })
+    res.end()
+  })
+  servers.push(server)
+  const port = await listen(server)
+
+  equal(await probeHarnessWeb(`http://127.0.0.1:${port}/?token=abc`), true)
+})
+
 test('probeHarnessWeb returns false for unrelated html', async () => {
   const server = createServer((_req, res) => {
     res.writeHead(200, { 'content-type': 'text/plain' })

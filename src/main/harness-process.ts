@@ -1,7 +1,7 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { CodedError } from '../i18n/index.js'
 
-const LOOPBACK_URL = /https?:\/\/(?:127\.0\.0\.1|localhost):\d+\/?/i
+const LOOPBACK_URL = /https?:\/\/(?:127\.0\.0\.1|localhost):\d+(?:\/\??[^ \t\r\n]*)?/i
 const INTERACTIVE_PROMPT = /choose which packages to build|approve(?:-| )builds|\? choose |press (?:enter|space)|use (?:arrow|the arrow) keys/i
 
 export function looksLikeInteractivePrompt(output: string): boolean {
@@ -28,7 +28,10 @@ export function parseHarnessWebUrl(output: string): string | null {
     return null
   }
 
-  return `${url.protocol}//127.0.0.1:${url.port}/`
+  // dsh 0.1.2+ prints a launch token (?token=...). Keep it so the WebContentsView
+  // can exchange it for the browser-auth cookie on first load.
+  const search = url.search
+  return `${url.protocol}//127.0.0.1:${url.port}/${search}`
 }
 
 async function waitForExit(child: ChildProcess): Promise<void> {

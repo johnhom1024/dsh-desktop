@@ -18,6 +18,13 @@ test('parseHarnessWebUrl reads the first loopback http url', () => {
   )
 })
 
+test('parseHarnessWebUrl keeps the dsh 0.1.2 launch token', () => {
+  equal(
+    parseHarnessWebUrl('dsh web: http://127.0.0.1:3083/?token=QiwkcZFVoRmNW_sW'),
+    'http://127.0.0.1:3083/?token=QiwkcZFVoRmNW_sW',
+  )
+})
+
 test('parseHarnessWebUrl ignores non-loopback urls', () => {
   equal(parseHarnessWebUrl('open http://example.com:3080'), null)
 })
