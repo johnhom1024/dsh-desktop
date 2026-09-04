@@ -622,6 +622,7 @@ function HostAppInner({ api }: HostAppProps) {
           <Button
             id="settings"
             type="button"
+            variant="ghost"
             role="tab"
             data-tab={SETTINGS_TAB_ID}
             aria-label={t('chrome.settingsAria')}
