@@ -136,6 +136,61 @@ describe('HostApp', () => {
     await changeLanguage('zh-CN')
   })
 
+  test('collapsed sidebar shows icons and keeps native instance menus accessible', async () => {
+    const user = userEvent.setup()
+    const menus: string[] = []
+    const toggles: boolean[] = []
+    const { api } = makeApi({
+      getState: async () => shellState({ sidebarCollapsed: true }),
+      popupInstanceMenu: async ({ instanceId }) => {
+        menus.push(instanceId)
+        return null
+      },
+      setSidebarCollapsed: async (value) => { toggles.push(value) },
+    })
+    render(<HostApp api={api} />)
+
+    const tab = await screen.findByRole('tab', { name: 'deepseek-harness' })
+    expect(tab.querySelector('svg')).toHaveClass('size-5')
+    expect(tab.textContent).toBe('')
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('button', { name: 'deepseek-harness 菜单' })).not.toBeInTheDocument()
+    await user.pointer({ target: tab, keys: '[MouseRight]' })
+    expect(menus).toEqual(['local-18080'])
+    tab.focus()
+    await user.keyboard('{Shift>}{F10}{/Shift}')
+    expect(menus).toEqual(['local-18080', 'local-18080'])
+
+    const toggle = document.getElementById('sidebar-toggle')!
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle.querySelector('svg')).toHaveClass('lucide-panel-left-open')
+    await user.click(toggle)
+    expect(toggles).toEqual([false])
+    await user.click(screen.getByRole('tab', { name: '设置' }))
+    expect(tab).toHaveAttribute('aria-selected', 'false')
+    await user.click(tab)
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('connection field sends the complete token URL and rejects credentials', async () => {
+    const user = userEvent.setup()
+    const inputs: unknown[] = []
+    const { api } = makeApi({ detect: async (input) => { inputs.push(input); return shellState() } })
+    render(<HostApp api={api} />)
+    await user.click(await screen.findByRole('button', { name: '前往设置' }))
+    const field = screen.getByLabelText('连接地址')
+    const url = 'https://example.com/dsh/?token=a%2Bb%2Fc%3D&next=%2Fapp'
+    await user.clear(field)
+    await user.type(field, url)
+    await user.click(screen.getByRole('button', { name: '连接' }))
+    await user.click(screen.getByRole('button', { name: '重新检测' }))
+    expect(inputs).toEqual([{ url }, { url }])
+    await user.clear(field)
+    await user.type(field, 'http://user:password@example.com')
+    expect(screen.getByRole('button', { name: '连接' })).toBeDisabled()
+    expect(field).toHaveAttribute('aria-invalid', 'true')
+  })
+
   test('shows an idle prompt on the instance tab instead of auto-running a command', async () => {
     const { api, installed } = makeApi({
       getState: async () => shellState({ lastPackageManager: null }),
@@ -164,8 +219,7 @@ describe('HostApp', () => {
     await user.click(await screen.findByRole('button', { name: '前往设置' }))
     expect(await screen.findByLabelText('pnpm')).toBeChecked()
     expect(screen.getByText('未连接')).toBeInTheDocument()
-    expect(screen.getByLabelText('IP')).toHaveValue('127.0.0.1')
-    expect(screen.getByLabelText('连接端口')).toHaveValue('18080')
+    expect(screen.getByLabelText('连接地址')).toHaveValue('http://127.0.0.1:18080')
     expect(screen.getByRole('button', { name: '连接' })).toBeEnabled()
     expect(screen.getByRole('button', { name: '重新检测' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: '启动服务' })).not.toBeInTheDocument()
@@ -343,8 +397,7 @@ describe('HostApp', () => {
     await user.click(screen.getByRole('button', { name: '切换连接' }))
     expect(await screen.findByRole('button', { name: '连接' })).toBeEnabled()
     expect(screen.getByText('未连接')).toBeInTheDocument()
-    expect(screen.getByLabelText('IP')).toHaveValue('127.0.0.1')
-    expect(screen.getByLabelText('连接端口')).toHaveValue('18080')
+    expect(screen.getByLabelText('连接地址')).toHaveValue('http://127.0.0.1:18080')
     expect(screen.queryByRole('button', { name: '终止服务' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '切换连接' })).not.toBeInTheDocument()
 

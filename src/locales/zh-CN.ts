@@ -96,7 +96,8 @@ export const zhCN = {
     detect: '重新检测',
     stop: '终止服务',
     restart: '重启服务',
-    connectPort: '连接端口',
+    connectAddress: '连接地址',
+    connectHint: '粘贴完整 http/https 地址（含 ?token=…），也支持 主机:端口。token 由官方页面验证，请勿分享该链接。',
     launchTitle: '启动 DeepSeek Harness',
     launchHint:
       '首次使用请选择本机已有的包管理器。确认后会写入配置。\n打开下方「自动启动」后，下次打开应用才会用这条命令拉起 {{host}}。',
@@ -161,7 +162,7 @@ export const zhCN = {
     remoteDisconnected: '已断开远程连接。',
     remoteUnreachable: '远程实例不可达：{{url}}',
     invalidPort: '端口必须是 1–65535 的整数',
-    invalidTarget: '请输入有效的 IP 和 1–65535 端口',
+    invalidTarget: '请输入有效的 http/https 地址或 主机:端口，不支持用户名/密码',
     notRunning: '{{url}} 上没有运行 DeepSeek Harness。可以启动服务。',
     unreachable: '无法连接到 {{url}}。请确认那边已经启动 DeepSeek Harness。',
     managerMissing: '没有找到这个包管理器，请先点检测。',

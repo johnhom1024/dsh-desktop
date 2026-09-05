@@ -46,6 +46,7 @@ import {
   type Settings,
 } from './runtime.js'
 import { isLoopbackHost, loadSettings, parseConnectTarget, parseLocalPort, saveSettings } from './settings.js'
+import { parseConnectionUrl, connectionUrlLabel } from '../connection-url.js'
 import { bindSingleInstance } from './single-instance.js'
 import { applyTrayMenu, createTray, hideInsteadOfClose, setTrayStatus } from './tray.js'
 import {
@@ -256,7 +257,7 @@ function startWatch(url: string): void {
       if (ok || quitting) {
         return
       }
-      logShell(`lost ${url}`)
+      logShell(`lost ${connectionUrlLabel(url)}`)
       currentUrl = null
       lastError = { code: 'error.unresponsive' }
       stopWatch()
@@ -465,10 +466,11 @@ function showInstanceView(instanceId: string, url: string): void {
         sandbox: true,
       },
     })
-    attachWindowGuards(view.webContents, new URL(url).origin)
     attachHostShortcuts(view.webContents)
     instanceViews.set(instanceId, view)
   }
+  view.webContents.removeAllListeners('will-navigate')
+  attachWindowGuards(view.webContents, new URL(url).origin)
   if (view.webContents.getURL() !== url) {
     void view.webContents.loadURL(url)
   }
@@ -575,7 +577,7 @@ async function applySource(source: RuntimeSource): Promise<string | null> {
   if (source.kind === 'remote') {
     const reachable = await probeHarnessWeb(source.url)
     if (!reachable) {
-      lastError = { code: 'error.remoteUnreachable', params: { url: source.url } }
+      lastError = { code: 'error.remoteUnreachable', params: { url: connectionUrlLabel(source.url) } }
       currentUrl = null
       return null
     }
@@ -671,31 +673,22 @@ function applyLocalPort(port: unknown): boolean {
   return true
 }
 
-async function connectTarget(input: { host?: unknown; port?: unknown }): Promise<void> {
-  const target = parseConnectTarget(input)
+async function connectTarget(input: { url?: unknown; host?: unknown; port?: unknown }): Promise<void> {
+  const legacy = input.url === undefined ? parseConnectTarget(input) : null
+  const target = parseConnectionUrl(input.url ?? (legacy ? `http://${legacy.host}:${legacy.port}` : null))
   if (!target) {
     lastError = { code: 'error.invalidTarget' }
     await pushState()
     return
   }
 
-  if (isLoopbackHost(target.host)) {
-    if (!applyLocalPort(target.port)) {
-      await pushState()
-      return
-    }
-    await connectActive({ spawn: false })
-    if (!currentUrl && !lastError) {
-      lastError = { code: 'error.notRunning', params: { url: `http://${target.host}:${target.port}` } }
-      await pushState()
-    }
-    return
-  }
-
-  const url = `http://${target.host}:${target.port}`
+  stopWatch()
+  lastError = null
+  const local = isLoopbackHost(target.host) || target.host === '[::1]'
+  const url = target.url
   const reachable = await probeHarnessWeb(url)
   if (!reachable) {
-    lastError = { code: 'error.unreachable', params: { url } }
+    lastError = { code: 'error.unreachable', params: { url: connectionUrlLabel(url) } }
     currentUrl = null
     hideInstanceViews()
     refreshTray()
@@ -703,8 +696,17 @@ async function connectTarget(input: { host?: unknown; port?: unknown }): Promise
     return
   }
 
-  currentSource = { kind: 'remote', url }
-  showInstanceView(loadSettings(userData()).activeInstanceId, url)
+  if (local) {
+    if (!applyLocalPort(target.port)) {
+      await pushState()
+      return
+    }
+    currentSource = { kind: 'reuse-local', url }
+    await showLocalUrl(url)
+  } else {
+    currentSource = { kind: 'remote', url }
+    showInstanceView(loadSettings(userData()).activeInstanceId, url)
+  }
   refreshTray()
   await pushState()
 }
@@ -1006,9 +1008,9 @@ function registerIpc(): void {
 
   ipcMain.handle('shellGetState', () => shellState())
 
-  ipcMain.handle('shellDetect', async (_event, input?: { host?: unknown; port?: unknown; localPort?: unknown }) => {
-    if (input?.host !== undefined || input?.port !== undefined) {
-      await connectTarget({ host: input.host, port: input.port ?? input.localPort })
+  ipcMain.handle('shellDetect', async (_event, input?: { url?: unknown; host?: unknown; port?: unknown; localPort?: unknown }) => {
+    if (input?.url !== undefined || input?.host !== undefined || input?.port !== undefined) {
+      await connectTarget({ url: input.url, host: input.host, port: input.port ?? input.localPort })
       return shellState()
     }
     if (input?.localPort !== undefined && !applyLocalPort(input.localPort)) {

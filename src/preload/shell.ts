@@ -26,7 +26,7 @@ export type ShellState = {
 
 contextBridge.exposeInMainWorld('dshShell', {
   getState: (): Promise<ShellState> => ipcRenderer.invoke('shellGetState'),
-  detect: (input?: { host?: string; port?: number; localPort?: number }): Promise<ShellState> =>
+  detect: (input?: { url?: string; host?: string; port?: number; localPort?: number }): Promise<ShellState> =>
     ipcRenderer.invoke('shellDetect', input),
   install: (id: PackageManagerOption['id'], input?: { localPort?: number }): Promise<ShellState> =>
     ipcRenderer.invoke('shellInstall', id, input),

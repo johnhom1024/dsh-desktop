@@ -27,7 +27,7 @@ export type ShellState = {
 
 export type DshShellApi = {
   getState: () => Promise<ShellState>
-  detect: (input?: { host?: string; port?: number; localPort?: number }) => Promise<ShellState>
+  detect: (input?: { url?: string; host?: string; port?: number; localPort?: number }) => Promise<ShellState>
   install: (id: PackageManagerId, input?: { localPort?: number }) => Promise<ShellState>
   updateDsh: () => Promise<ShellState>
   saveLocalPort: (input: { localPort: number }) => Promise<ShellState>

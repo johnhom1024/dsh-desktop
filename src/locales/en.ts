@@ -97,7 +97,8 @@ export const en = {
     detect: 'Check again',
     stop: 'Stop service',
     restart: 'Restart service',
-    connectPort: 'Connect port',
+    connectAddress: 'Connection URL',
+    connectHint: 'Paste the full HTTP(S) URL including ?token=…; host:port also works. The official page validates the token. Do not share this link.',
     launchTitle: 'Start DeepSeek Harness',
     launchHint:
       'For first-time setup, pick a package manager already on this machine. Confirming writes it to settings.\nTurn on Auto-start below if you want the next launch to run this command for {{host}}.',
@@ -164,7 +165,7 @@ export const en = {
     remoteDisconnected: 'Disconnected from the remote instance.',
     remoteUnreachable: 'Remote instance is unreachable: {{url}}',
     invalidPort: 'Port must be an integer from 1–65535',
-    invalidTarget: 'Enter a valid IP and a port from 1–65535',
+    invalidTarget: 'Enter an HTTP(S) URL or host:port without username/password',
     notRunning: 'DeepSeek Harness is not running at {{url}}. You can start the service.',
     unreachable: 'Could not connect to {{url}}. Make sure DeepSeek Harness is already running there.',
     managerMissing: 'That package manager was not found. Check again first.',

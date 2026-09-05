@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import { Toaster, type ToastAction, type ToastItem } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { InstanceTab } from './InstanceTab'
+import { connectionUrlLabel, parseConnectionUrl } from '../connection-url'
 import {
   changeLanguage,
   formatHostError,
@@ -92,29 +93,6 @@ function previewWithPort(preview: string, port: number): string {
   return preview.replace(/--port\s+\d+/, `--port ${port}`)
 }
 
-function hostFromUrl(url: string | null | undefined, fallback = '127.0.0.1'): string {
-  if (!url) {
-    return fallback
-  }
-  try {
-    return new URL(url).hostname || fallback
-  } catch {
-    return fallback
-  }
-}
-
-function portFromUrl(url: string | null | undefined, fallback = 3080): number {
-  if (!url) {
-    return fallback
-  }
-  try {
-    const port = Number(new URL(url).port)
-    return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback
-  } catch {
-    return fallback
-  }
-}
-
 function IdleDescription({ host, text }: { host: string; text: string }) {
   const index = text.indexOf(host)
   if (index < 0) {
@@ -174,8 +152,7 @@ function HostAppInner({ api }: HostAppProps) {
   const [renameValue, setRenameValue] = useState('')
   const [renameError, setRenameError] = useState('')
   const [portDraft, setPortDraft] = useState('3080')
-  const [connectHost, setConnectHost] = useState('127.0.0.1')
-  const [connectPort, setConnectPort] = useState('3080')
+  const [connectUrl, setConnectUrl] = useState('http://127.0.0.1:3080')
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const toastIdRef = useRef(0)
   const lastToastErrorRef = useRef<string | null>(null)
@@ -329,24 +306,10 @@ function HostAppInner({ api }: HostAppProps) {
       }
       return draft
     })
-    setConnectHost((draft) => {
-      if (current?.url && !next.url) {
-        return hostFromUrl(current.url, draft)
-      }
-      const nextHost = hostFromUrl(next.url, '127.0.0.1')
-      if (!current || draft === hostFromUrl(current.url, '127.0.0.1')) {
-        return nextHost
-      }
-      return draft
-    })
-    setConnectPort((draft) => {
-      if (current?.url && !next.url) {
-        return String(portFromUrl(current.url, Number(draft) || next.localPort || 3080))
-      }
-      const nextPort = String(portFromUrl(next.url, next.localPort || 3080))
-      if (!current || draft === String(portFromUrl(current.url, current.localPort || 3080))) {
-        return nextPort
-      }
+    setConnectUrl((draft) => {
+      if (current?.url && !next.url) return current.url
+      const previous = current?.url ?? `http://127.0.0.1:${current?.localPort || 3080}`
+      if (!current || draft === previous) return next.url ?? `http://127.0.0.1:${next.localPort || 3080}`
       return draft
     })
     stateRef.current = next
@@ -531,13 +494,13 @@ function HostAppInner({ api }: HostAppProps) {
   }
 
   const parsedPort = parsePortDraft(portDraft)
-  const parsedConnectPort = parsePortDraft(connectPort)
+  const parsedConnectUrl = parseConnectionUrl(connectUrl)
   const starting = Boolean(state?.starting)
   const portDirty = parsedPort !== null && parsedPort !== (state?.localPort ?? 3080)
   const installDisabled = busy || starting || !selectedId || parsedPort === null
   const savePortDisabled = busy || starting || !portDirty
   const port = parsedPort ?? state?.localPort ?? 3080
-  const connectDisabled = busy || starting || !connectHost.trim() || parsedConnectPort === null
+  const connectDisabled = busy || starting || parsedConnectUrl === null
   const instances = visibleInstances(state)
   const instance = instances[0] ?? null
   const connected = Boolean(state?.detected && state.url)
@@ -557,28 +520,32 @@ function HostAppInner({ api }: HostAppProps) {
         id="chrome"
         data-collapsed={collapsed || undefined}
         className={cn(
-          'relative flex h-full shrink-0 flex-col border-r bg-muted/60 transition-[width] duration-200',
+          'relative flex h-full shrink-0 flex-col border-r border-border/70 bg-muted/40',
           collapsed ? 'w-[84px]' : 'w-52',
           IS_MAC && 'pt-[44px]',
         )}
       >
-        <Button
-          id="sidebar-toggle"
-          type="button"
-          variant="ghost"
-          className="absolute right-2 top-[52px] z-10 size-7 shrink-0 p-0 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
-          aria-label={t('chrome.toggleSidebar', { label: t(collapsed ? 'chrome.expand' : 'chrome.collapse') })}
-          title={t(collapsed ? 'chrome.expand' : 'chrome.collapse')}
-          onClick={toggleSidebar}
-        >
-          {collapsed ? <PanelLeftClose className="size-4" aria-hidden="true" /> : null}
-          {!collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : null}
-        </Button>
+        <div className={cn('flex h-12 shrink-0 items-center', collapsed ? 'justify-center' : 'justify-between px-3')}>
+          {!collapsed ? <span className="pl-1 text-xs font-semibold tracking-wide text-muted-foreground">DSH Desktop</span> : null}
+          <Button
+            id="sidebar-toggle"
+            type="button"
+            variant="ghost"
+            className="size-8 shrink-0 rounded-lg p-0 text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+            aria-expanded={!collapsed}
+            aria-controls="tabs"
+            aria-label={t('chrome.toggleSidebar', { label: t(collapsed ? 'chrome.expand' : 'chrome.collapse') })}
+            title={t(collapsed ? 'chrome.expand' : 'chrome.collapse')}
+            onClick={toggleSidebar}
+          >
+            {collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
+          </Button>
+        </div>
         <nav
           id="tabs"
           role="tablist"
           aria-orientation="vertical"
-          className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-2 pt-11"
+          className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-1"
         >
           {instances.map((item) => (
             <InstanceTab
@@ -599,14 +566,14 @@ function HostAppInner({ api }: HostAppProps) {
             />
           ))}
         </nav>
-        <div className="flex shrink-0 flex-col border-t px-2 py-2">
+        <div className="mx-3 flex shrink-0 flex-col items-center gap-1 border-t border-border/70 py-3">
           <Button
             id="theme-toggle"
             type="button"
             variant="ghost"
             className={cn(
-              'h-9 w-full text-sm text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
-              collapsed ? 'justify-center px-0' : 'justify-start gap-2 px-2.5',
+              'rounded-xl text-sm text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
+              collapsed ? 'size-11 justify-center px-0' : 'h-10 w-full justify-start gap-2.5 px-3',
             )}
             aria-label={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
             title={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
@@ -626,17 +593,18 @@ function HostAppInner({ api }: HostAppProps) {
             role="tab"
             data-tab={SETTINGS_TAB_ID}
             aria-label={t('chrome.settingsAria')}
+            title={t('chrome.settingsAria')}
             aria-selected={settingsOpen}
             className={cn(
-              'mt-1.5 inline-flex h-9 w-full rounded-lg border text-sm transition-colors',
-              collapsed ? 'justify-center px-0' : 'justify-start gap-2 px-2.5',
+              'inline-flex rounded-xl border text-sm transition-colors',
+              collapsed ? 'size-11 justify-center px-0' : 'h-10 w-full justify-start gap-2.5 px-3',
               settingsOpen
-                ? 'border-border bg-card text-foreground shadow-sm'
-                : 'border-transparent text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
+                ? 'border-primary/15 bg-primary/10 text-primary shadow-sm hover:bg-primary/15'
+                : 'border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
             )}
             onClick={openSettingsPage}
           >
-            <Settings className="size-3.5 shrink-0" aria-hidden="true" />
+            <Settings className="size-4 shrink-0" aria-hidden="true" />
             {!collapsed ? <span className="truncate">{t('common.settings')}</span> : null}
           </Button>
         </div>
@@ -717,7 +685,7 @@ function HostAppInner({ api }: HostAppProps) {
                     </div>
                     <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
                       <span className="text-sm text-muted-foreground">{t('settings.address')}</span>
-                      <code className="font-mono text-sm">{state?.url}</code>
+                      <code className="font-mono text-sm">{state?.url ? connectionUrlLabel(state.url) : ''}</code>
                     </div>
                     <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
                       <span className="text-sm text-muted-foreground">{t('settings.source')}</span>
@@ -779,8 +747,7 @@ function HostAppInner({ api }: HostAppProps) {
                       onClick={() => {
                         void run(t('status.detectingAgain'), () =>
                           api.detect({
-                            host: hostFromUrl(state?.url, connectHost),
-                            port: portFromUrl(state?.url, parsedPort ?? state?.localPort ?? 3080),
+                            url: state?.url ?? connectUrl,
                           }),
                         )
                       }}
@@ -814,31 +781,22 @@ function HostAppInner({ api }: HostAppProps) {
                       <span className="text-sm">{starting ? t('settings.starting') : t('settings.disconnected')}</span>
                     </div>
                     <div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                      <span className="text-sm text-muted-foreground">{t('settings.address')}</span>
-                      <div className="flex min-w-0 items-center justify-start gap-2">
+                      <Label htmlFor="connectUrl" className="text-sm text-muted-foreground">{t('settings.connectAddress')}</Label>
+                      <div className="min-w-0 space-y-2">
                         <Input
-                          id="connectHost"
+                          id="connectUrl"
                           type="text"
-                          aria-label={t('common.ip')}
-                          placeholder="127.0.0.1"
-                          value={connectHost}
-                          className="w-40"
-                          onChange={(event) => {
-                            setConnectHost(event.target.value)
-                          }}
+                          inputMode="url"
+                          autoComplete="off"
+                          spellCheck={false}
+                          placeholder="http://127.0.0.1:3080/?token=…"
+                          value={connectUrl}
+                          aria-describedby="connect-url-hint"
+                          aria-invalid={Boolean(connectUrl.trim()) && !parsedConnectUrl}
+                          onChange={(event) => setConnectUrl(event.target.value)}
                         />
-                        <Input
-                          id="connectPort"
-                          type="text"
-                          inputMode="numeric"
-                          aria-label={t('settings.connectPort')}
-                          placeholder="3080"
-                          value={connectPort}
-                          className="w-24"
-                          onChange={(event) => {
-                            setConnectPort(event.target.value)
-                          }}
-                        />
+                        <p id="connect-url-hint" className="text-xs text-muted-foreground">{t('settings.connectHint')}</p>
+                        {connectUrl.trim() && !parsedConnectUrl ? <p className="text-xs text-destructive">{t('error.invalidTarget')}</p> : null}
                       </div>
                     </div>
                   </div>
@@ -850,13 +808,13 @@ function HostAppInner({ api }: HostAppProps) {
                       size="sm"
                       disabled={connectDisabled}
                       onClick={() => {
-                        if (!connectHost.trim() || parsedConnectPort === null) {
+                        if (parsedConnectUrl === null) {
                           setStatus(t('error.invalidTarget'))
                           setStatusError(true)
                           return
                         }
                         void run(t('status.detectingAgain'), () =>
-                          api.detect({ host: connectHost.trim(), port: parsedConnectPort }),
+                          api.detect({ url: parsedConnectUrl.url }),
                         )
                       }}
                     >
@@ -868,13 +826,13 @@ function HostAppInner({ api }: HostAppProps) {
                       size="sm"
                       disabled={connectDisabled}
                       onClick={() => {
-                        if (!connectHost.trim() || parsedConnectPort === null) {
+                        if (parsedConnectUrl === null) {
                           setStatus(t('error.invalidTarget'))
                           setStatusError(true)
                           return
                         }
                         void run(t('status.connecting'), () =>
-                          api.detect({ host: connectHost.trim(), port: parsedConnectPort }),
+                          api.detect({ url: parsedConnectUrl.url }),
                         )
                       }}
                     >

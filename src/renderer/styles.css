@@ -110,10 +110,9 @@
   outline: none;
 }
 
-#chrome [role="tab"]:focus,
 #chrome [role="tab"]:focus-visible {
-  outline: none;
-  box-shadow: none;
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
 }
 
 #chrome #tabs {

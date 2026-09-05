@@ -1,6 +1,7 @@
-import { MoreHorizontal } from 'lucide-react'
+import { Globe, MoreHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { DeepSeekIcon } from '@/components/icons/DeepSeekIcon'
 import { cn } from '@/lib/utils'
 import type { Instance } from './dsh-shell'
 
@@ -32,61 +33,52 @@ export function tabUrlLabel(url: string | null | undefined): string | undefined 
 export function InstanceTab({ instance, selected, href, collapsed = false, onSelect, onMenu }: InstanceTabProps) {
   const { t } = useTranslation()
   const urlLabel = tabUrlLabel(href ?? instance.url)
-  if (collapsed) {
-    return (
-      <div
-        title={instance.name}
-        className={cn(
-          'flex h-9 w-full shrink-0 items-center rounded-lg border transition-colors',
-          selected
-            ? 'border-border bg-card text-foreground shadow-sm'
-            : 'border-transparent text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
-        )}
-      >
-        <button
-          type="button"
-          role="tab"
-          data-tab={instance.id}
-          aria-label={instance.name}
-          aria-selected={selected}
-          className="inline-flex size-full min-w-0 items-center justify-center"
-          onClick={() => {
-            onSelect(instance)
-          }}
-        >
-          <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-        </button>
-      </div>
-    )
-  }
+  const isRemote = instance.kind === 'remote'
+  const iconClass = cn('size-5 shrink-0', selected && 'text-primary')
   return (
     <div
-      title={urlLabel}
+      title={collapsed ? [instance.name, urlLabel].filter(Boolean).join('\n') : urlLabel}
       className={cn(
-        'group flex h-9 w-full shrink-0 items-center rounded-lg border pl-2.5 pr-0.5 text-sm transition-colors',
+        'group relative flex shrink-0 items-center rounded-xl border text-sm transition-colors',
+        collapsed ? 'size-11 self-center' : 'h-11 w-full pr-1',
         selected
-          ? 'border-border bg-card text-foreground shadow-sm'
-          : 'border-transparent text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
+          ? 'border-primary/15 bg-primary/10 text-foreground shadow-sm'
+          : 'border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
       )}
     >
       <button
         type="button"
         role="tab"
         data-tab={instance.id}
+        aria-label={instance.name}
         aria-selected={selected}
-        className="inline-flex min-w-0 flex-1 items-center gap-2 py-1 pr-1"
+        aria-haspopup="menu"
+        className={cn(
+          'inline-flex h-full min-w-0 flex-1 items-center rounded-xl',
+          collapsed ? 'justify-center' : 'gap-2.5 pl-3 pr-1',
+        )}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          onMenu(instance)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+            event.preventDefault()
+            onMenu(instance)
+          }
+        }}
         onClick={() => {
           onSelect(instance)
         }}
       >
-        <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-        <span className="truncate">{instance.name}</span>
+        {isRemote ? <Globe className={iconClass} aria-hidden="true" /> : <DeepSeekIcon className={iconClass} />}
+        {!collapsed ? <span className="truncate font-medium">{instance.name}</span> : null}
       </button>
-      <Button
+      {!collapsed ? <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="size-6 shrink-0 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+        className="size-6 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:bg-foreground/10 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
         aria-label={t('chrome.instanceMenu', { name: instance.name })}
         onClick={(event) => {
           event.stopPropagation()
@@ -94,7 +86,7 @@ export function InstanceTab({ instance, selected, href, collapsed = false, onSel
         }}
       >
         <MoreHorizontal className="size-3.5" aria-hidden="true" />
-      </Button>
+      </Button> : null}
     </div>
   )
 }
