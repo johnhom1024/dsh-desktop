@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import { DSH_PACKAGE_LATEST, PNPM_DLX_PREFIX, harnessWebArgs } from './package-managers.js'
+import { DSH_PACKAGE_LATEST, PNPM_DLX_PREFIX, harnessWebArgs, userPnpmBin } from './package-managers.js'
 import { DEFAULT_LOCAL_PORT, type RuntimeSource } from './runtime.js'
 
 export type LaunchSpec =
@@ -10,6 +10,14 @@ export type LaunchSpec =
   | { kind: 'none' }
 
 export function whichOnPath(bin: string): string | null {
+  if (bin === 'pnpm') {
+    // Prefer the user's standalone pnpm home binary; PATH may expose a
+    // corepack shim from another runtime whose version drifts per project.
+    const override = userPnpmBin()
+    if (override) {
+      return override
+    }
+  }
   try {
     const found = execFileSync('which', [bin], { encoding: 'utf8' }).trim()
     return found || null
