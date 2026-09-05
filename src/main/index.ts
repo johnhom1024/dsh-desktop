@@ -9,7 +9,6 @@ import {
   app,
   clipboard,
   ipcMain,
-  nativeImage,
   nativeTheme,
   shell,
   type MenuItemConstructorOptions,
@@ -1085,12 +1084,10 @@ function registerIpc(): void {
     return new Promise<InstanceMenuAction | null>((resolve) => {
       const menu = Menu.buildFromTemplate(
         instanceMenuItems(canReload, Boolean(externalUrl)).map((item): MenuItemConstructorOptions => {
-          const icon = nativeImage.createFromNamedImage(item.symbol, [-1, 0, 1])
           return {
             id: item.id,
             label: item.label,
             enabled: item.enabled,
-            icon: icon.isEmpty() ? undefined : icon,
             click: () => {
               if (item.id === 'reload') {
                 reloadInstanceView(instance.id)

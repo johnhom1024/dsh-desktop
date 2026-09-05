@@ -32,7 +32,7 @@
 
 - 摘视图：`api.acquireOverlay()` / `api.releaseOverlay()`，主进程 `overlayCount`
 - 设置页：`openSettings()` / `closeSettingsOverlay()`，内部也走同一套计数
-- 实例菜单：`api.popupInstanceMenu({ instanceId })` → 原生 `Menu.popup`（重命名 / 刷新 / 浏览器打开，左侧系统图标）
+- 实例菜单：`api.popupInstanceMenu({ instanceId })` → 原生 `Menu.popup`（重命名 / 刷新 / 浏览器打开，纯文字无图标）
 - 宿主 DevTools 检查元素：打开时同样挡住官方视图
 
 ## 窗口拖拽

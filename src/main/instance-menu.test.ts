@@ -6,17 +6,12 @@ import { instanceExternalUrl, instanceMenuItems } from './instance-menu.js'
 await ready()
 await changeLanguage('zh-CN')
 
-test('instanceMenuItems puts rename, reload, then browser open', () => {
-  deepEqual(
-    instanceMenuItems(true, true).map((item) => item.id),
-    ['rename', 'reload', 'open-external'],
-  )
-  equal(instanceMenuItems(true, true)[0]?.label, '重命名')
-  equal(instanceMenuItems(true, true)[0]?.symbol, 'pencil')
-  equal(instanceMenuItems(true, true)[1]?.label, '刷新')
-  equal(instanceMenuItems(true, true)[1]?.symbol, 'arrow.clockwise')
-  equal(instanceMenuItems(true, true)[2]?.label, '浏览器打开')
-  equal(instanceMenuItems(true, true)[2]?.symbol, 'safari')
+test('instanceMenuItems returns text-only rename, reload, then browser open', () => {
+  deepEqual(instanceMenuItems(true, true), [
+    { id: 'rename', label: '重命名', enabled: true },
+    { id: 'reload', label: '刷新', enabled: true },
+    { id: 'open-external', label: '浏览器打开', enabled: true },
+  ])
 })
 
 test('instanceMenuItems disables reload and browser open when there is no url', () => {

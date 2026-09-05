@@ -36,7 +36,7 @@
 
 ## 3. 首次使用与设置里的启动
 
-主窗口是 Arc 式垂直侧边栏布局：左侧宿主侧栏（展开 208px / 收起 84px；顶部 44px 头部区内嵌 macOS 红绿灯，往下是实例 tab 垂直列表，底部是主题切换和设置 tab），右侧整块是官方 Web 的 `WebContentsView`，从 y=0 顶到窗口右上角。侧栏可收起：点头部下方的切换按钮或按 `Cmd+\`（Windows/Linux `Ctrl+\`），收起后 tab 只剩图标（hover 出 tooltip），红绿灯位置不动；状态记在 `settings.json`（`sidebarCollapsed`），重启保持。凡是会画出侧栏的宿主 UI（设置页、重命名弹窗、宿主 DevTools 检查）必须先摘掉官方视图；tab 三点菜单用系统原生 `Menu.popup`，不要用 HTML 下拉。菜单项左侧用系统图标：「重命名」、「刷新」和「浏览器打开」。详见 [host-overlays.md](host-overlays.md)。多实例（远程 tab / 加号）先关掉，以后再加。侧栏整条都是窗口拖拽区（含 tab 下方空白），只有按钮本身不拖。
+主窗口是 Arc 式垂直侧边栏布局：左侧宿主侧栏（展开 208px / 收起 84px；顶部 44px 头部区内嵌 macOS 红绿灯，往下是实例 tab 垂直列表，底部是主题切换和设置 tab），右侧整块是官方 Web 的 `WebContentsView`，从 y=0 顶到窗口右上角。侧栏可收起：点头部下方的切换按钮或按 `Cmd+\`（Windows/Linux `Ctrl+\`），收起后 tab 只剩图标（hover 出 tooltip），红绿灯位置不动；状态记在 `settings.json`（`sidebarCollapsed`），重启保持。凡是会画出侧栏的宿主 UI（设置页、重命名弹窗、宿主 DevTools 检查）必须先摘掉官方视图；tab 三点菜单用系统原生 `Menu.popup`，不要用 HTML 下拉。菜单项使用纯文字，不显示图标：「重命名」、「刷新」和「浏览器打开」。详见 [host-overlays.md](host-overlays.md)。多实例（远程 tab / 加号）先关掉，以后再加。侧栏整条都是窗口拖拽区（含 tab 下方空白），只有按钮本身不拖。
 
 没检测到官方 Web 时，本机 tab 显示空状态：「当前没有启动服务，首次使用请先去设置里设置」。不会在这个容器里列出安装命令，也不会自动执行。
 

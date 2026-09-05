@@ -5,7 +5,6 @@ export type InstanceMenuAction = 'rename' | 'reload' | 'open-external'
 export type InstanceMenuItem = {
   id: InstanceMenuAction
   label: string
-  symbol: string
   enabled: boolean
 }
 
@@ -14,19 +13,16 @@ export function instanceMenuItems(canReload: boolean, canOpenExternal: boolean):
     {
       id: 'rename',
       label: t('instanceMenu.rename'),
-      symbol: 'pencil',
       enabled: true,
     },
     {
       id: 'reload',
       label: t('instanceMenu.reload'),
-      symbol: 'arrow.clockwise',
       enabled: canReload,
     },
     {
       id: 'open-external',
       label: t('instanceMenu.openExternal'),
-      symbol: 'safari',
       enabled: canOpenExternal,
     },
   ]
