@@ -14,7 +14,7 @@
 └────────────┴────────────────────────────┘
 ```
 
-宿主 HTML 只有左侧侧栏这一条不会被盖住（展开 208px，收起 84px；主进程 `sidebarWidthFor()` 决定官方页 x 起点，收起状态持久化在 `settings.json` 的 `sidebarCollapsed`）。
+宿主 HTML 只有左侧侧栏这一条不会被盖住（展开 208px，收起 84px；主进程 `sidebarWidthFor()` 决定官方页 x 起点，收起状态持久化在 `settings.json` 的 `sidebarCollapsed`）。展开/收起时侧栏 CSS 与官方页 bounds 共用 220ms ease-in-out，不能只动一边。
 
 ## 开发新功能时先问
 

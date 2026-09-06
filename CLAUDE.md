@@ -1,6 +1,6 @@
 # dsh-desktop
 
-薄 Electron 宿主，不 fork 官方 DeepSeek Harness。宿主是 Arc 式垂直侧边栏（React + Tailwind + shadcn）：左侧 rail（展开 208px / 收起 84px，`Cmd+\` 切换，状态持久化）放 tab 和设置；官方 UI 是侧栏右侧的 `WebContentsView`，从 y=0 顶到窗口右上角。
+薄 Electron 宿主，不 fork 官方 DeepSeek Harness。宿主是 Arc 式垂直侧边栏（React + Tailwind + shadcn）：左侧 rail（展开 208px / 收起 84px，`Cmd+\` 切换，状态持久化，220ms 过渡并同步官方页 bounds）放 tab 和设置；官方 UI 是侧栏右侧的 `WebContentsView`，从 y=0 顶到窗口右上角。
 
 完整功能见 `docs/features.md`。叠层细则见 `docs/host-overlays.md`。
 

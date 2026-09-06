@@ -10,9 +10,45 @@ export const SIDEBAR_WIDTH = 208
 // put at x=16, ending at x≈69 — never collide with the toggle button below.
 export const SIDEBAR_COLLAPSED_WIDTH = 84
 
+// Collapse / expand duration shared by the host rail CSS and the native
+// WebContentsView. Keep them in lockstep so the official page never leaves a
+// gap or covers the rail mid-animation.
+export const SIDEBAR_TOGGLE_MS = 220
+
 // Helper for choosing the rail width from persisted state.
 export function sidebarWidthFor(collapsed: boolean): number {
   return collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH
+}
+
+export function clamp01(value: number): number {
+  if (value <= 0) {
+    return 0
+  }
+  if (value >= 1) {
+    return 1
+  }
+  return value
+}
+
+export function lerp(from: number, to: number, t: number): number {
+  return from + (to - from) * t
+}
+
+// Smoothstep (3t² − 2t³). Close enough to CSS `ease-in-out` for a 124px
+// travel that the rail and the official view stay visually locked.
+export function easeInOut(t: number): number {
+  const x = clamp01(t)
+  return x * x * (3 - 2 * x)
+}
+
+export function sidebarWidthAt(from: number, to: number, elapsedMs: number, durationMs = SIDEBAR_TOGGLE_MS): number {
+  if (durationMs <= 0 || elapsedMs >= durationMs) {
+    return to
+  }
+  if (elapsedMs <= 0) {
+    return from
+  }
+  return lerp(from, to, easeInOut(elapsedMs / durationMs))
 }
 
 export type ViewBounds = {

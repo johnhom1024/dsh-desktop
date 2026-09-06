@@ -521,12 +521,14 @@ function HostAppInner({ api }: HostAppProps) {
         data-collapsed={collapsed || undefined}
         className={cn(
           'relative flex h-full shrink-0 flex-col border-r border-border/70 bg-muted/40',
-          collapsed ? 'w-[84px]' : 'w-52',
           IS_MAC && 'pt-[44px]',
         )}
       >
-        <div className={cn('flex h-12 shrink-0 items-center', collapsed ? 'justify-center' : 'justify-between px-3')}>
-          {!collapsed ? <span className="pl-1 text-xs font-semibold tracking-wide text-muted-foreground">DSH Desktop</span> : null}
+        <div className="flex h-12 shrink-0 items-center px-3">
+          <span className="sidebar-label pl-1 text-xs font-semibold tracking-wide text-muted-foreground">
+            DSH Desktop
+          </span>
+          <span className="min-w-0 flex-1" aria-hidden="true" />
           <Button
             id="sidebar-toggle"
             type="button"
@@ -540,6 +542,7 @@ function HostAppInner({ api }: HostAppProps) {
           >
             {collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
           </Button>
+          <span className="sidebar-collapse-spacer" aria-hidden="true" />
         </div>
         <nav
           id="tabs"
@@ -571,10 +574,7 @@ function HostAppInner({ api }: HostAppProps) {
             id="theme-toggle"
             type="button"
             variant="ghost"
-            className={cn(
-              'rounded-xl text-sm text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
-              collapsed ? 'size-9 justify-center px-0' : 'h-9 w-full justify-start gap-2 px-3',
-            )}
+            className="h-9 w-full gap-2 rounded-xl px-3 text-sm text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
             aria-label={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
             title={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
             onClick={() => {
@@ -584,7 +584,7 @@ function HostAppInner({ api }: HostAppProps) {
             {theme === 'light' ? <Sun className="size-4 shrink-0" aria-hidden="true" /> : null}
             {theme === 'dark' ? <Moon className="size-4 shrink-0" aria-hidden="true" /> : null}
             {theme === 'system' ? <Monitor className="size-4 shrink-0" aria-hidden="true" /> : null}
-            {!collapsed ? <span className="truncate">{t(themeLabelKey(theme))}</span> : null}
+            <span className="sidebar-label truncate" aria-hidden="true">{t(themeLabelKey(theme))}</span>
           </Button>
           <Button
             id="settings"
@@ -596,8 +596,7 @@ function HostAppInner({ api }: HostAppProps) {
             title={t('chrome.settingsAria')}
             aria-selected={settingsOpen}
             className={cn(
-              'inline-flex rounded-xl border text-sm transition-colors',
-              collapsed ? 'size-9 justify-center px-0' : 'h-9 w-full justify-start gap-2 px-3',
+              'inline-flex h-9 w-full gap-2 rounded-xl border px-3 text-sm transition-colors',
               settingsOpen
                 ? 'border-primary/15 bg-primary/10 text-primary shadow-sm hover:bg-primary/15'
                 : 'border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
@@ -605,7 +604,7 @@ function HostAppInner({ api }: HostAppProps) {
             onClick={openSettingsPage}
           >
             <Settings className="size-4 shrink-0" aria-hidden="true" />
-            {!collapsed ? <span className="truncate">{t('common.settings')}</span> : null}
+            <span className="sidebar-label truncate" aria-hidden="true">{t('common.settings')}</span>
           </Button>
         </div>
         <Toaster toasts={toasts} onDismiss={dismissToast} collapsed={collapsed} />

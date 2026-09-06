@@ -39,8 +39,7 @@ export function InstanceTab({ instance, selected, href, collapsed = false, onSel
     <div
       title={collapsed ? [instance.name, urlLabel].filter(Boolean).join('\n') : urlLabel}
       className={cn(
-        'group relative flex shrink-0 items-center rounded-xl border text-sm transition-colors',
-        collapsed ? 'size-9 self-center' : 'h-9 w-full pr-1',
+        'group relative flex h-9 w-full shrink-0 items-center rounded-xl border pr-1 text-sm transition-colors',
         selected
           ? 'border-primary/15 bg-primary/10 text-foreground shadow-sm'
           : 'border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
@@ -53,10 +52,7 @@ export function InstanceTab({ instance, selected, href, collapsed = false, onSel
         aria-label={instance.name}
         aria-selected={selected}
         aria-haspopup="menu"
-        className={cn(
-          'inline-flex h-full min-w-0 flex-1 items-center rounded-xl',
-          collapsed ? 'justify-center' : 'gap-2 pl-3 pr-1',
-        )}
+        className="inline-flex h-full min-w-0 flex-1 items-center rounded-xl"
         onContextMenu={(event) => {
           event.preventDefault()
           onMenu(instance)
@@ -72,13 +68,15 @@ export function InstanceTab({ instance, selected, href, collapsed = false, onSel
         }}
       >
         {isRemote ? <Globe className={iconClass} aria-hidden="true" /> : <DeepSeekIcon className={iconClass} />}
-        {!collapsed ? <span className="truncate font-medium">{instance.name}</span> : null}
+        <span className="sidebar-label truncate font-medium" aria-hidden="true">{instance.name}</span>
       </button>
-      {!collapsed ? <Button
+      <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="size-6 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:bg-foreground/10 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+        tabIndex={collapsed ? -1 : 0}
+        aria-hidden={collapsed || undefined}
+        className="sidebar-extra size-6 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:bg-foreground/10 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
         aria-label={t('chrome.instanceMenu', { name: instance.name })}
         onClick={(event) => {
           event.stopPropagation()
@@ -86,7 +84,7 @@ export function InstanceTab({ instance, selected, href, collapsed = false, onSel
         }}
       >
         <MoreHorizontal className="size-3.5" aria-hidden="true" />
-      </Button> : null}
+      </Button>
     </div>
   )
 }

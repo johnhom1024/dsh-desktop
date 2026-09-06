@@ -11,6 +11,7 @@ import {
   ipcMain,
   nativeTheme,
   shell,
+  systemPreferences,
   type MenuItemConstructorOptions,
   type WebContents,
 } from 'electron'
@@ -20,7 +21,13 @@ import { startHarnessWeb, stopListeningOnPort } from './harness-process.js'
 import { appendHostLog, formatTrayStatus } from './host-state.js'
 import { instanceExternalUrl, instanceMenuItems, type InstanceMenuAction } from './instance-menu.js'
 import { removeInstance, renameInstance, selectInstance, setLocalPort, upsertInstance } from './instances.js'
-import { layoutActiveView, shouldShowInstanceView, sidebarWidthFor } from './instance-views.js'
+import {
+  SIDEBAR_TOGGLE_MS,
+  layoutActiveView,
+  shouldShowInstanceView,
+  sidebarWidthAt,
+  sidebarWidthFor,
+} from './instance-views.js'
 import { launchSpecFor } from './launch.js'
 import { startControlServer, type ControlAction } from './control-server.js'
 import {
@@ -86,6 +93,12 @@ const instanceViews = new Map<string, WebContentsView>()
 let overlayCount = 0
 let hostDevToolsOpen = false
 let stopControlServer: (() => Promise<void>) | null = null
+let sidebarAnim: {
+  from: number
+  to: number
+  startedAt: number
+  frame: ReturnType<typeof setTimeout> | null
+} | null = null
 
 function userData(): string {
   return app.getPath('userData')
@@ -367,8 +380,9 @@ function handleHostShortcut(action: HostShortcut, source: WebContents): void {
   }
   if (action === 'toggle-sidebar') {
     const current = loadSettings(userData())
-    persistSettings({ ...current, sidebarCollapsed: !(current.sidebarCollapsed === true) })
-    layoutViews()
+    const next = !(current.sidebarCollapsed === true)
+    persistSettings({ ...current, sidebarCollapsed: next })
+    animateSidebarTo(next)
     void pushState()
     return
   }
@@ -423,6 +437,63 @@ function hideInstanceViews(): void {
   }
 }
 
+function stopSidebarAnimation(): void {
+  if (!sidebarAnim) {
+    return
+  }
+  if (sidebarAnim.frame) {
+    clearTimeout(sidebarAnim.frame)
+  }
+  sidebarAnim = null
+}
+
+function currentSidebarWidth(): number {
+  if (sidebarAnim) {
+    return sidebarWidthAt(sidebarAnim.from, sidebarAnim.to, Date.now() - sidebarAnim.startedAt)
+  }
+  return sidebarWidthFor(loadSettings(userData()).sidebarCollapsed === true)
+}
+
+function scheduleSidebarFrame(): void {
+  if (!sidebarAnim) {
+    return
+  }
+  sidebarAnim.frame = setTimeout(() => {
+    if (!sidebarAnim) {
+      return
+    }
+    const elapsed = Date.now() - sidebarAnim.startedAt
+    if (elapsed >= SIDEBAR_TOGGLE_MS) {
+      stopSidebarAnimation()
+      layoutViews()
+      return
+    }
+    layoutViews()
+    scheduleSidebarFrame()
+  }, 16)
+}
+
+function prefersReducedMotion(): boolean {
+  try {
+    return systemPreferences.getAnimationSettings().prefersReducedMotion === true
+  } catch {
+    return false
+  }
+}
+
+function animateSidebarTo(collapsed: boolean): void {
+  const to = sidebarWidthFor(collapsed)
+  const from = currentSidebarWidth()
+  stopSidebarAnimation()
+  if (from === to || prefersReducedMotion()) {
+    layoutViews()
+    return
+  }
+  sidebarAnim = { from, to, startedAt: Date.now(), frame: null }
+  layoutViews()
+  scheduleSidebarFrame()
+}
+
 function layoutViews(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
@@ -432,7 +503,7 @@ function layoutViews(): void {
   const [width, height] = mainWindow.getContentSize()
   if (!officialViewBlocked()) {
     layoutActiveView(instanceViews, currentUrl ? activeId : null, { width, height }, {
-      sidebarWidth: sidebarWidthFor(settings.sidebarCollapsed === true),
+      sidebarWidth: currentSidebarWidth(),
     })
   }
   for (const [id, view] of instanceViews) {
@@ -863,6 +934,7 @@ function ensureMainWindow(): BrowserWindow {
   mainWindow.on('resize', persistWindowBounds)
   mainWindow.on('move', persistWindowBounds)
   mainWindow.on('closed', () => {
+    stopSidebarAnimation()
     destroyInstanceViews()
     overlayCount = 0
     hostDevToolsOpen = false
@@ -1198,7 +1270,7 @@ function registerIpc(): void {
       return
     }
     persistSettings({ ...current, sidebarCollapsed: next })
-    layoutViews()
+    animateSidebarTo(next)
     void pushState()
   })
 

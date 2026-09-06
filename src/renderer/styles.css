@@ -119,4 +119,107 @@
   scrollbar-width: thin;
 }
 
+/* Collapse / expand: width on the rail, fade on labels. Duration and
+   easing match SIDEBAR_TOGGLE_MS / easeInOut in the main process so
+   the native WebContentsView tracks the rail. Do not overflow:hidden
+   the rail — collapsed toasts sit past the right edge. */
+#chrome {
+  width: 208px;
+  transition: width 220ms ease-in-out;
+}
+
+#chrome[data-collapsed] {
+  width: 84px;
+}
+
+#chrome .sidebar-label {
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 1;
+  max-width: 12rem;
+  transition:
+    opacity 160ms ease-in-out,
+    max-width 220ms ease-in-out;
+}
+
+#chrome[data-collapsed] .sidebar-label {
+  opacity: 0;
+  max-width: 0;
+  min-width: 0;
+  padding-inline: 0;
+  pointer-events: none;
+}
+
+/* Kebab stays hover-only when expanded; collapse just squeezes it away
+   without forcing opacity:1 (that would fight the hover fade). */
+#chrome .sidebar-extra {
+  overflow: hidden;
+  max-width: 1.5rem;
+  transition: max-width 220ms ease-in-out;
+}
+
+#chrome[data-collapsed] .sidebar-extra {
+  max-width: 0;
+  pointer-events: none;
+}
+
+/* Expanded: title | spacer | toggle. Collapsed: a trailing spacer equal
+   to the leftover inner width on each side of the 32px toggle
+   (84px rail − 24px padding − 32px button) / 2 = 14px. */
+#chrome .sidebar-collapse-spacer {
+  flex: 0 0 0;
+  width: 0;
+  overflow: hidden;
+  transition: flex-basis 220ms ease-in-out;
+}
+
+#chrome[data-collapsed] .sidebar-collapse-spacer {
+  flex-basis: 0.875rem;
+}
+
+/* Keep the tab/theme/settings glyphs optically centered in the 84px rail
+   while labels are still fading out (they occupy 0 max-width). */
+#chrome [data-tab] {
+  justify-content: flex-start;
+  padding-inline: 0.75rem 0.25rem;
+  gap: 0.5rem;
+  transition:
+    padding-inline 220ms ease-in-out,
+    gap 220ms ease-in-out;
+}
+
+#chrome[data-collapsed] [data-tab] {
+  justify-content: center;
+  padding-inline: 0;
+  gap: 0;
+}
+
+#chrome[data-collapsed] #tabs > * {
+  padding-right: 0;
+}
+
+#chrome #theme-toggle {
+  justify-content: flex-start;
+  transition:
+    padding-inline 220ms ease-in-out,
+    gap 220ms ease-in-out;
+}
+
+#chrome[data-collapsed] #theme-toggle {
+  justify-content: center;
+  padding-inline: 0;
+  gap: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #chrome,
+  #chrome .sidebar-label,
+  #chrome .sidebar-extra,
+  #chrome .sidebar-collapse-spacer,
+  #chrome [data-tab],
+  #chrome #theme-toggle {
+    transition: none;
+  }
+}
+
 

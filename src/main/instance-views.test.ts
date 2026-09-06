@@ -2,10 +2,14 @@ import { deepEqual, equal } from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   SIDEBAR_COLLAPSED_WIDTH,
+  SIDEBAR_TOGGLE_MS,
   SIDEBAR_WIDTH,
   chromeContentBounds,
+  easeInOut,
   layoutActiveView,
+  lerp,
   shouldShowInstanceView,
+  sidebarWidthAt,
   sidebarWidthFor,
 } from './instance-views.js'
 
@@ -30,6 +34,27 @@ test('chromeContentBounds uses the collapsed rail width when collapsed', () => {
 test('sidebarWidthFor maps state to rail width', () => {
   equal(sidebarWidthFor(false), SIDEBAR_WIDTH)
   equal(sidebarWidthFor(true), SIDEBAR_COLLAPSED_WIDTH)
+})
+
+test('easeInOut is 0 at start, 0.5 at mid, 1 at end', () => {
+  equal(easeInOut(0), 0)
+  equal(easeInOut(0.5), 0.5)
+  equal(easeInOut(1), 1)
+  equal(easeInOut(-1), 0)
+  equal(easeInOut(2), 1)
+})
+
+test('lerp interpolates linearly', () => {
+  equal(lerp(84, 208, 0), 84)
+  equal(lerp(84, 208, 1), 208)
+  equal(lerp(84, 208, 0.5), 146)
+})
+
+test('sidebarWidthAt stays at the start until time moves, then eases to the end', () => {
+  equal(sidebarWidthAt(SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH, 0), SIDEBAR_WIDTH)
+  equal(sidebarWidthAt(SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_TOGGLE_MS), SIDEBAR_COLLAPSED_WIDTH)
+  equal(sidebarWidthAt(SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_TOGGLE_MS + 40), SIDEBAR_COLLAPSED_WIDTH)
+  equal(sidebarWidthAt(SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH, SIDEBAR_TOGGLE_MS / 2), 146)
 })
 
 test('chromeContentBounds keeps a zero-width view when the window is narrower than the sidebar', () => {

@@ -152,9 +152,10 @@ describe('HostApp', () => {
 
     const tab = await screen.findByRole('tab', { name: 'deepseek-harness' })
     expect(tab.querySelector('svg')).toHaveClass('size-4')
-    expect(tab.textContent).toBe('')
+    expect(tab.querySelector('.sidebar-label')).toHaveAttribute('aria-hidden', 'true')
     expect(tab).toHaveAttribute('aria-selected', 'true')
-    expect(screen.queryByRole('button', { name: 'deepseek-harness 菜单' })).not.toBeInTheDocument()
+    expect(document.getElementById('chrome')).toHaveAttribute('data-collapsed')
+    expect(document.querySelector('[aria-label="deepseek-harness 菜单"]')).toHaveAttribute('aria-hidden', 'true')
     await user.pointer({ target: tab, keys: '[MouseRight]' })
     expect(menus).toEqual(['local-18080'])
     tab.focus()
