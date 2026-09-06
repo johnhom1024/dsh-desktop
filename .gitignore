@@ -8,3 +8,4 @@ build/icon.png
 .pnpm-store/
 .hermes/*.png
 .vscode/
+.zvec-grep/

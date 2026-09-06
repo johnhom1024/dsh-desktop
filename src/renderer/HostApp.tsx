@@ -573,7 +573,7 @@ function HostAppInner({ api }: HostAppProps) {
             variant="ghost"
             className={cn(
               'rounded-xl text-sm text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
-              collapsed ? 'size-11 justify-center px-0' : 'h-10 w-full justify-start gap-2.5 px-3',
+              collapsed ? 'size-9 justify-center px-0' : 'h-9 w-full justify-start gap-2 px-3',
             )}
             aria-label={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
             title={t('chrome.themeAria', { label: t(themeLabelKey(theme)) })}
@@ -597,7 +597,7 @@ function HostAppInner({ api }: HostAppProps) {
             aria-selected={settingsOpen}
             className={cn(
               'inline-flex rounded-xl border text-sm transition-colors',
-              collapsed ? 'size-11 justify-center px-0' : 'h-10 w-full justify-start gap-2.5 px-3',
+              collapsed ? 'size-9 justify-center px-0' : 'h-9 w-full justify-start gap-2 px-3',
               settingsOpen
                 ? 'border-primary/15 bg-primary/10 text-primary shadow-sm hover:bg-primary/15'
                 : 'border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground',

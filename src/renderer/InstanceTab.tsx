@@ -34,13 +34,13 @@ export function InstanceTab({ instance, selected, href, collapsed = false, onSel
   const { t } = useTranslation()
   const urlLabel = tabUrlLabel(href ?? instance.url)
   const isRemote = instance.kind === 'remote'
-  const iconClass = cn('size-5 shrink-0', selected && 'text-primary')
+  const iconClass = cn('size-4 shrink-0', selected && 'text-primary')
   return (
     <div
       title={collapsed ? [instance.name, urlLabel].filter(Boolean).join('\n') : urlLabel}
       className={cn(
         'group relative flex shrink-0 items-center rounded-xl border text-sm transition-colors',
-        collapsed ? 'size-11 self-center' : 'h-11 w-full pr-1',
+        collapsed ? 'size-9 self-center' : 'h-9 w-full pr-1',
         selected
           ? 'border-primary/15 bg-primary/10 text-foreground shadow-sm'
           : 'border-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
@@ -55,7 +55,7 @@ export function InstanceTab({ instance, selected, href, collapsed = false, onSel
         aria-haspopup="menu"
         className={cn(
           'inline-flex h-full min-w-0 flex-1 items-center rounded-xl',
-          collapsed ? 'justify-center' : 'gap-2.5 pl-3 pr-1',
+          collapsed ? 'justify-center' : 'gap-2 pl-3 pr-1',
         )}
         onContextMenu={(event) => {
           event.preventDefault()

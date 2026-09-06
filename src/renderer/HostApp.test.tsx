@@ -151,7 +151,7 @@ describe('HostApp', () => {
     render(<HostApp api={api} />)
 
     const tab = await screen.findByRole('tab', { name: 'deepseek-harness' })
-    expect(tab.querySelector('svg')).toHaveClass('size-5')
+    expect(tab.querySelector('svg')).toHaveClass('size-4')
     expect(tab.textContent).toBe('')
     expect(tab).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByRole('button', { name: 'deepseek-harness 菜单' })).not.toBeInTheDocument()
