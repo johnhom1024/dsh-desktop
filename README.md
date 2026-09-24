@@ -24,6 +24,14 @@
   <img alt="license" src="https://img.shields.io/badge/license-MIT-22c55e">
 </p>
 
+> [!WARNING]
+> **dsh-desktop is deprecated (2026-09-24) and no longer maintained.**
+> On macOS, `dsh web` is now owned by a launchd LaunchAgent and managed with
+> **[dsh-ctl](https://github.com/johnhom1024/dsh-ctl)** — a bash CLI
+> (`status / start / stop / restart / upgrade`) that keeps the service alive across
+> terminal, app, and agent exits. The loopback control API on `127.0.0.1:8999`
+> described in this README is retired; use dsh-ctl instead.
+
 This repo does **not** fork the official project. The desktop app only owns process lifecycle, connection, tray, and settings. Agent work and the official Web UI stay in DeepSeek Harness.
 
 <p align="center">

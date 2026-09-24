@@ -24,6 +24,10 @@
   <img alt="license" src="https://img.shields.io/badge/license-MIT-22c55e">
 </p>
 
+> [!WARNING]
+> **dsh-desktop 已于 2026-09-24 废弃，不再维护。**
+> macOS 上 `dsh web` 现在由 launchd LaunchAgent 持有，用 **[dsh-ctl](https://github.com/johnhom1024/dsh-ctl)** 管理——一个 bash CLI（`status / start / stop / restart / upgrade`），终端、应用、agent 退出都带不走服务。本文描述的 `127.0.0.1:8999` 本机控制接口已退役，请改用 dsh-ctl。
+
 这个仓库**不 fork** 官方项目。桌面端只负责进程、连接、托盘和设置。Agent 能力和官方 Web UI 仍在 DeepSeek Harness 里。
 
 <p align="center">
